@@ -1,13 +1,46 @@
 use anchor_lang::prelude::*;
 
 use crate::state::*;
+use crate::error::ErrorCode;
+use crate::events::*;
 
-pub fn deactivate_record(ctx: Context<DeactivateRecord>) -> Result<()> {
-    msg!("unimplemented: {:?}", ctx.program_id);
+pub fn deactivate_record(ctx: Context<DeactivateRecord>, _record_id: u64) -> Result<()> {
+    let user_vault = &mut ctx.accounts.user_vault;
+    let health_record = &mut ctx.accounts.health_record;
+
+    require!(
+        user_vault.owner == ctx.accounts.owner.key(),
+        ErrorCode::UnauthorizedAccess
+    );
+    require!(
+        health_record.owner == ctx.accounts.owner.key(),
+        ErrorCode::UnauthorizedAccess
+    );
+    require!(
+        health_record.is_active,
+        ErrorCode::RecordAlreadyDeactivated
+    );
+
+    // Deactivate record
+    health_record.is_active = false;
+
+    // Remove record ID from user vault
+    user_vault
+        .record_ids
+        .retain(|&id| id != health_record.record_id);
+
+    emit!(HealthRecordDeactivated {
+        owner: ctx.accounts.owner.key(),
+        record_id: health_record.record_id.to_string(),
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    msg!("Health record deactivated: {}", health_record.record_id);
     Ok(())
 }
 
 #[derive(Accounts)]
+#[instruction(record_id: u64)]
 pub struct DeactivateRecord<'info> {
     #[account(
         mut,
@@ -18,14 +51,7 @@ pub struct DeactivateRecord<'info> {
 
     #[account(
         mut,
-        seeds = [b"record_counter"],
-        bump
-    )]
-    pub record_counter: Account<'info, RecordCounter>,
-
-    #[account(
-        mut,
-        seeds = [b"health_record", owner.key().as_ref(), record_counter.record_id.to_le_bytes().as_ref()],
+        seeds = [b"health_record", owner.key().as_ref(), record_id.to_le_bytes().as_ref()],
         bump
     )]
     pub health_record: Account<'info, HealthRecord>,

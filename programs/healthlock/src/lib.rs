@@ -33,17 +33,19 @@ pub mod healthlock {
 
     pub fn grant_access(
         ctx: Context<GrantAccess>,
+        record_id: u64,
         organization: Pubkey,
         access_duration: Option<i64>,
     ) -> Result<()> {
-        instructions::grant_access(ctx, organization, access_duration)
+        instructions::grant_access(ctx, record_id, organization, access_duration)
     }
 
     pub fn revoke_access(
         ctx: Context<RevokeAccess>,
+        record_id: u64,
         organization: Pubkey,
     ) -> Result<()> {
-        instructions::revoke_access(ctx, organization)
+        instructions::revoke_access(ctx, record_id, organization)
     }
 
     pub fn update_user_vault(
@@ -53,8 +55,8 @@ pub mod healthlock {
        instructions::update_user_vault(ctx, is_active)
     }
 
-    pub fn deactivate_record(ctx: Context<DeactivateRecord>) -> Result<()> {
-        instructions::deactivate_record(ctx)
+    pub fn deactivate_record(ctx: Context<DeactivateRecord>, record_id: u64,) -> Result<()> {
+        instructions::deactivate_record(ctx, record_id)
     }
 }
 

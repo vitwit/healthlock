@@ -8,4 +8,22 @@ pub enum ErrorCode {
     DescriptionTooLong,
     #[msg("File type is too long")]
     FileTypeTooLong,
+    #[msg("Access already granted to this organization")]
+    AccessAlreadyGranted,
+    #[msg("Access not found for this organization")]
+    AccessNotFound,
+    #[msg("Unauthorized access to this resource")]
+    UnauthorizedAccess,
+    #[msg("User vault is deactivated")]
+    VaultDeactivated,
+    #[msg("Health record is deactivated")]
+    RecordDeactivated,
+    #[msg("Health record is already deactivated")]
+    RecordAlreadyDeactivated,
+    #[msg("Maximum number of records reached")]
+    MaxRecordsReached,
+    #[msg("Maximum number of access permissions reached")]
+    MaxAccessReached,
+    #[msg("Invalid record ID")]
+    InvalidRecordId,
 }

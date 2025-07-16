@@ -27,7 +27,7 @@ pub struct RegisterUser<'info> {
         payer = owner,
         space = ANCHOR_DESCRIMINATOR_SIZE + UserVault::INIT_SPACE,
         seeds = [
-            b"user_valut", 
+            b"user_vault", 
             owner.key().as_ref()
         ],
         bump
