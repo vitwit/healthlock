@@ -18,3 +18,6 @@ pub use update_user_vault::*;
 
 pub mod deactivate_record;
 pub use deactivate_record::*;
+
+pub mod register_organization;
+pub use register_organization::*;

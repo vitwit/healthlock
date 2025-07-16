@@ -63,10 +63,11 @@ pub struct UploadHealthRecord<'info> {
     #[account(
         mut,
         seeds = [b"user_vault", owner.key().as_ref()],
-        bump
+        bump,
     )]
     pub user_vault: Account<'info, UserVault>,
 
+    
     #[account(
         mut,
         seeds = [b"record_counter"],
@@ -77,7 +78,18 @@ pub struct UploadHealthRecord<'info> {
     #[account(
         init,
         payer = owner,
-        space = ANCHOR_DESCRIMINATOR_SIZE + HealthRecord::INIT_SPACE,
+        space = ANCHOR_DESCRIMINATOR_SIZE 
+            + 32 
+            + 8 
+            + 4 + 1000 
+            + 4 + 100  
+            + 4 + 100  
+            + 8  
+            + 8  
+            + 8  
+            + 4  
+            + 1  
+            + 100,
         seeds = [b"health_record", owner.key().as_ref(), record_counter.record_id.to_le_bytes().as_ref()],
         bump
     )]

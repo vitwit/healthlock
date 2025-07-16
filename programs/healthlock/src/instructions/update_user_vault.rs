@@ -6,7 +6,6 @@ use crate::state::*;
 pub fn update_user_vault(ctx: Context<UpdateUserVault>, is_active: bool) -> Result<()> {
     let user_vault = &mut ctx.accounts.user_vault;
 
-    // Check ownership
     require!(
         user_vault.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess

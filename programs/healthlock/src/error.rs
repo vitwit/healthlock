@@ -26,4 +26,12 @@ pub enum ErrorCode {
     MaxAccessReached,
     #[msg("Invalid record ID")]
     InvalidRecordId,
+    #[msg("organization name is too long")]
+    NameTooLong,
+    #[msg("organization contact info is too long")]
+    ContactInfoTooLong,
+    #[msg("Organization is deactivated")]
+    OrganizationDeactivated,
+    #[msg("Invalid organization")]
+    InvalidOrganization,
 }

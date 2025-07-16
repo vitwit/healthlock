@@ -21,9 +21,11 @@ pub struct AccessGranted {
     pub record_owner: Pubkey,
     pub record_id: String,
     pub organization: Pubkey,
+    pub organization_name: String,
     pub expires_at: Option<i64>,
     pub timestamp: i64,
 }
+
 
 #[event]
 pub struct AccessRevoked {
@@ -45,5 +47,14 @@ pub struct HealthRecordRetrieved {
 pub struct HealthRecordDeactivated {
     pub owner: Pubkey,
     pub record_id: String,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct OrganizationRegistered {
+    pub owner: Pubkey,
+    pub organization_id: u64,
+    pub organization_account: Pubkey,
+    pub name: String,
     pub timestamp: i64,
 }

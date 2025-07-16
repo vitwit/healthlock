@@ -23,6 +23,18 @@ pub mod healthlock {
         instructions::register_user(ctx)
     }
 
+    pub fn initialize_organization_counter(ctx: Context<InitializeOrganizationCounter>) -> Result<()> {
+        instructions::initialize_organization_counter(ctx)
+    }
+
+    pub fn register_organization(
+        ctx: Context<RegisterOrganization>,
+        name: String,
+        contact_info: String,
+    ) -> Result<()> {
+        instructions::register_organization(ctx, name, contact_info)
+    }
+
     pub fn upload_health_record(
         ctx: Context<UploadHealthRecord>,
         encrypted_data: Vec<u8>,
