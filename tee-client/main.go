@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/gagliardetto/solana-go"
@@ -14,7 +17,7 @@ import (
 )
 
 const (
-	PROGRAM_ID                = "5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX"
+	PROGRAM_ID                = "8X7bEsKtuLqRcEM7s7RJ9wiCwdbdQ56yZQapYX5vVfjV"
 	ANCHOR_DISCRIMINATOR_SIZE = 8
 )
 
@@ -323,50 +326,80 @@ func main() {
 		log.Fatalf("Program check failed: %v", err)
 	}
 
-	fmt.Println("\n=== Testing TEE Node Registration ===")
+	apiServer := NewApiServer(client)
+	mux := RegisterHandler(apiServer)
+	addr := ":8080"
+	fmt.Printf("API Server listening on %s\n", addr)
+	log.Fatal(http.ListenAndServe(addr, mux))
+}
 
-	samplePubkey := []byte("sample_tee_public_key_12345")
-	sampleAttestation := []byte("sample_attestation_data_67890")
+func RegisterHandler(apiServer *ApiServer) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/tee/state", apiServer.GetTEEState)
+	mux.HandleFunc("/tee/register", apiServer.RegisterTEENode)
+	return mux
+}
 
-	teeState, err := client.GetTEEState()
+// --- API Server Section ---
+
+type ApiServer struct {
+	client *HealthLockClient
+}
+
+func NewApiServer(hlClient *HealthLockClient) *ApiServer {
+	return &ApiServer{client: hlClient}
+}
+
+// Updated handler (handle GET, add content-type)
+func (api *ApiServer) GetTEEState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet { // Enforce GET
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	state, err := api.client.GetTEEState()
 	if err != nil {
-		fmt.Printf("TEE state read failed (expected if not registered): %v\n", err)
-	} else {
-		fmt.Printf("TEE node already registered for signer: %s\n", teeState.Signer)
-		fmt.Printf("TEE Pubkey: %s\n", string(teeState.Pubkey))
-		fmt.Printf("TEE Attestation: %s\n", string(teeState.Attestation))
-		fmt.Printf("Is Initialized: %t\n", teeState.IsInitialized)
+		http.Error(w, fmt.Sprintf("Failed to get TEE state: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(state)
+}
+
+func (api *ApiServer) RegisterTEENode(w http.ResponseWriter, r *http.Request) {
+	type Request struct {
+		PubKey      string `json:"pubkey"`      // base58 or hex
+		Attestation string `json:"attestation"` // base64
 	}
 
-	if teeState == nil {
-		fmt.Println("\n=== Registering TEE Node ===")
-		sig3, err := client.RegisterTEENode(samplePubkey, sampleAttestation)
-		if err != nil {
-			fmt.Printf("TEE node registration failed: %v\n", err)
-		} else {
-			fmt.Printf("TEE node registered! Tx: %s\n", sig3)
-			// Wait for this transaction to confirm
-			fmt.Println("Waiting for TEE registration confirmation...")
-			err = client.WaitForConfirmation(*sig3)
-			if err != nil {
-				fmt.Printf("Failed to confirm TEE registration: %v\n", err)
-			} else {
-				fmt.Println("TEE node registration confirmed!")
-			}
-		}
+	var req Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
 	}
 
-	fmt.Println("\n=== Testing TEE State Read (After Registration) ===")
-	teeState, err = client.GetTEEState()
+	// Decode inputs
+	pubkey, err := base64.StdEncoding.DecodeString(req.PubKey)
 	if err != nil {
-		fmt.Printf("TEE state read failed: %v\n", err)
-	} else {
-		fmt.Printf("✅ TEE state successfully read!\n")
-		fmt.Printf("Signer: %s\n", teeState.Signer)
-		fmt.Printf("TEE Pubkey: %s\n", string(teeState.Pubkey))
-		fmt.Printf("TEE Attestation: %s\n", string(teeState.Attestation))
-		fmt.Printf("Is Initialized: %t\n", teeState.IsInitialized)
+		http.Error(w, "invalid pubkey format", http.StatusBadRequest)
+		return
 	}
 
-	fmt.Println("\n=== Test Complete ===")
+	attestation, err := base64.StdEncoding.DecodeString(req.Attestation)
+	if err != nil {
+		http.Error(w, "invalid attestation format", http.StatusBadRequest)
+		return
+	}
+
+	// Call on-chain registration logic
+	sig, err := api.client.RegisterTEENode(pubkey, attestation)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to register TEE node: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success
+	resp := map[string]string{"signature": sig.String()}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
