@@ -6,9 +6,10 @@ type Config struct {
 }
 
 type SolanaConfig struct {
-	RPC       string `toml:"rpc"`
-	WebSocket string `toml:"websocket"`
-	ProgramID string `toml:"program-id"`
+	RPC         string `toml:"rpc"`
+	WebSocket   string `toml:"websocket"`
+	ProgramID   string `toml:"program-id"`
+	NetworkType string `toml:"network-type"` // e.g. "local", "devnet", "mainnet"
 }
 
 type RestConfig struct {
