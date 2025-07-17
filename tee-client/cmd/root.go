@@ -89,7 +89,7 @@ func runStart(cmd *cobra.Command, args []string) {
 		}
 		fmt.Println("Initial airdrop transaction signature:", out)
 
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 20)
 	}
 
 	// make sure that TEE hardware
