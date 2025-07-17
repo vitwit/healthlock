@@ -28,7 +28,9 @@ pub struct RecordMetadata {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
 pub struct AccessPermission {
-    pub organization: Pubkey,    
+    pub organization: Pubkey,
+    #[max_len(100)]
+    pub organization_name: String, // Store organization name for easy reference
     pub granted_at: i64,
     pub expires_at: Option<i64>,
     pub is_active: bool, 
