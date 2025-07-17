@@ -21,19 +21,6 @@ const (
 // Program ID
 var programID = solana.MustPublicKeyFromBase58(PROGRAM_ID)
 
-// Instruction discriminators - properly calculated for Anchor
-var (
-	InitializeRecordCounterDiscriminator       = calculateDiscriminator("global:initialize_record_counter")
-	RegisterUserDiscriminator                  = calculateDiscriminator("global:register_user")
-	InitializeOrganizationCounterDiscriminator = calculateDiscriminator("global:initialize_organization_counter")
-	RegisterOrganizationDiscriminator          = calculateDiscriminator("global:register_organization")
-	UploadHealthRecordDiscriminator            = calculateDiscriminator("global:upload_health_record")
-	GrantAccessDiscriminator                   = calculateDiscriminator("global:grant_access")
-	RevokeAccessDiscriminator                  = calculateDiscriminator("global:revoke_access")
-	UpdateUserVaultDiscriminator               = calculateDiscriminator("global:update_user_vault")
-	DeactivateRecordDiscriminator              = calculateDiscriminator("global:deactivate_record")
-)
-
 // calculateDiscriminator generates the 8-byte discriminator for Anchor instructions
 func calculateDiscriminator(name string) []byte {
 	hash := sha256.Sum256([]byte(name))
@@ -42,6 +29,14 @@ func calculateDiscriminator(name string) []byte {
 
 type RecordCounter struct {
 	RecordId uint64 `borsh:"record_id"`
+}
+
+// TEEState represents the TEE node state structure
+type TEEState struct {
+	Signer        solana.PublicKey `borsh:"signer"`
+	Pubkey        []byte           `borsh:"pubkey"`
+	Attestation   []byte           `borsh:"attestation"`
+	IsInitialized bool             `borsh:"is_initialized"`
 }
 
 // HealthLockClient represents the client for interacting with the HealthLock program
@@ -101,47 +96,34 @@ func (c *HealthLockClient) CheckProgramExists() error {
 	return nil
 }
 
-// GetRecordCounter gets the current record counter value
-func (c *HealthLockClient) GetRecordCounter() (*RecordCounter, error) {
-	recordCounterPDA, _, err := c.findProgramAddress([][]byte{[]byte("record_counter")})
+// RegisterTEENode registers a new TEE node with the given public key and attestation
+func (c *HealthLockClient) RegisterTEENode(pubkey, attestation []byte) (*solana.Signature, error) {
+	statePDA, _, err := c.findProgramAddress([][]byte{
+		[]byte("state"),
+		c.wallet.PublicKey().Bytes(),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive record counter PDA: %w", err)
+		return nil, fmt.Errorf("failed to derive state PDA: %w", err)
 	}
 
-	ctx := context.Background()
-	accountInfo, err := c.rpcClient.GetAccountInfo(ctx, recordCounterPDA)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get record counter account info: %w", err)
-	}
+	instructionData := make([]byte, 0)
 
-	if accountInfo.Value == nil {
-		return nil, fmt.Errorf("record counter account not found (needs to be initialized)")
-	}
+	discriminator := calculateDiscriminator("global:register_tee")
 
-	data := accountInfo.Value.Data.GetBinary()
-	if len(data) < 16 {
-		return nil, fmt.Errorf("account data too short")
-	}
+	instructionData = append(instructionData, discriminator...)
 
-	recordIdBytes := data[8:16]
-	recordId := binary.LittleEndian.Uint64(recordIdBytes)
+	pubkeyLen := make([]byte, 4)
+	binary.LittleEndian.PutUint32(pubkeyLen, uint32(len(pubkey)))
+	instructionData = append(instructionData, pubkeyLen...)
+	instructionData = append(instructionData, pubkey...)
 
-	counter := &RecordCounter{
-		RecordId: recordId,
-	}
-
-	return counter, nil
-}
-
-// InitializeRecordCounter initializes the global record counter
-func (c *HealthLockClient) InitializeRecordCounter() (*solana.Signature, error) {
-	recordCounterPDA, _, err := c.findProgramAddress([][]byte{[]byte("record_counter")})
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive record counter PDA: %w", err)
-	}
+	attestationLen := make([]byte, 4)
+	binary.LittleEndian.PutUint32(attestationLen, uint32(len(attestation)))
+	instructionData = append(instructionData, attestationLen...)
+	instructionData = append(instructionData, attestation...)
 
 	accounts := []*solana.AccountMeta{
-		{PublicKey: recordCounterPDA, IsSigner: false, IsWritable: true},
+		{PublicKey: statePDA, IsSigner: false, IsWritable: true},
 		{PublicKey: c.wallet.PublicKey(), IsSigner: true, IsWritable: true},
 		{PublicKey: solana.SystemProgramID, IsSigner: false, IsWritable: false},
 	}
@@ -149,27 +131,94 @@ func (c *HealthLockClient) InitializeRecordCounter() (*solana.Signature, error) 
 	instruction := &solana.GenericInstruction{
 		ProgID:        c.programID,
 		AccountValues: accounts,
-		DataBytes:     InitializeRecordCounterDiscriminator,
+		DataBytes:     instructionData,
 	}
 
 	return c.sendTransaction([]*solana.GenericInstruction{instruction})
 }
 
+// GetTEEState retrieves the TEE state for the current signer
+func (c *HealthLockClient) GetTEEState() (*TEEState, error) {
+	statePDA, _, err := c.findProgramAddress([][]byte{
+		[]byte("state"),
+		c.wallet.PublicKey().Bytes(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive state PDA: %w", err)
+	}
+
+	ctx := context.Background()
+	accountInfo, err := c.rpcClient.GetAccountInfo(ctx, statePDA)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get TEE state account info: %w", err)
+	}
+
+	if accountInfo.Value == nil {
+		return nil, fmt.Errorf("TEE state account not found (needs to be registered)")
+	}
+
+	data := accountInfo.Value.Data.GetBinary()
+	if len(data) < ANCHOR_DISCRIMINATOR_SIZE {
+		return nil, fmt.Errorf("account data too short")
+	}
+
+	stateData := data[ANCHOR_DISCRIMINATOR_SIZE:]
+
+	if len(stateData) < 32 {
+		return nil, fmt.Errorf("insufficient data for TEE state")
+	}
+
+	state := &TEEState{}
+
+	copy(state.Signer[:], stateData[0:32])
+	offset := 32
+
+	if len(stateData) < offset+4 {
+		return nil, fmt.Errorf("insufficient data for pubkey length")
+	}
+	pubkeyLen := binary.LittleEndian.Uint32(stateData[offset : offset+4])
+	offset += 4
+
+	if len(stateData) < offset+int(pubkeyLen) {
+		return nil, fmt.Errorf("insufficient data for pubkey")
+	}
+	state.Pubkey = make([]byte, pubkeyLen)
+	copy(state.Pubkey, stateData[offset:offset+int(pubkeyLen)])
+	offset += int(pubkeyLen)
+
+	if len(stateData) < offset+4 {
+		return nil, fmt.Errorf("insufficient data for attestation length")
+	}
+	attestationLen := binary.LittleEndian.Uint32(stateData[offset : offset+4])
+	offset += 4
+
+	if len(stateData) < offset+int(attestationLen) {
+		return nil, fmt.Errorf("insufficient data for attestation")
+	}
+	state.Attestation = make([]byte, attestationLen)
+	copy(state.Attestation, stateData[offset:offset+int(attestationLen)])
+	offset += int(attestationLen)
+
+	if len(stateData) < offset+1 {
+		return nil, fmt.Errorf("insufficient data for is_initialized")
+	}
+	state.IsInitialized = stateData[offset] != 0
+
+	return state, nil
+}
+
 // sendTransaction sends a transaction to the network
 func (c *HealthLockClient) sendTransaction(instructions []*solana.GenericInstruction) (*solana.Signature, error) {
-	// Get recent blockhash
 	recent, err := c.rpcClient.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent blockhash: %w", err)
 	}
 
-	// Convert to solana.Instruction interface
 	var solanaInstructions []solana.Instruction
 	for _, inst := range instructions {
 		solanaInstructions = append(solanaInstructions, inst)
 	}
 
-	// Create transaction
 	tx, err := solana.NewTransaction(
 		solanaInstructions,
 		recent.Value.Blockhash,
@@ -179,7 +228,6 @@ func (c *HealthLockClient) sendTransaction(instructions []*solana.GenericInstruc
 		return nil, fmt.Errorf("failed to create transaction: %w", err)
 	}
 
-	// Sign transaction
 	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
 		if key.Equals(c.wallet.PublicKey()) {
 			return &c.wallet
@@ -190,13 +238,11 @@ func (c *HealthLockClient) sendTransaction(instructions []*solana.GenericInstruc
 		return nil, fmt.Errorf("failed to sign transaction: %w", err)
 	}
 
-	// Send transaction
 	sig, err := c.rpcClient.SendTransaction(context.Background(), tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send transaction: %w", err)
 	}
 
-	fmt.Printf("Transaction sent: %s\n", sig)
 	return &sig, nil
 }
 
@@ -207,12 +253,10 @@ func (c *HealthLockClient) WaitForConfirmation(sig solana.Signature) error {
 	retryDelay := 2 * time.Second
 
 	for i := 0; i < maxRetries; i++ {
-		// Wait before checking (except first iteration)
 		if i > 0 {
 			time.Sleep(retryDelay)
 		}
 
-		// Try to get the transaction
 		tx, err := c.rpcClient.GetTransaction(ctx, sig, &rpc.GetTransactionOpts{
 			Commitment: rpc.CommitmentFinalized,
 		})
@@ -226,7 +270,6 @@ func (c *HealthLockClient) WaitForConfirmation(sig solana.Signature) error {
 			continue
 		}
 
-		// Check if transaction succeeded
 		if tx.Meta.Err != nil {
 			return fmt.Errorf("transaction failed: %v", tx.Meta.Err)
 		}
@@ -239,19 +282,15 @@ func (c *HealthLockClient) WaitForConfirmation(sig solana.Signature) error {
 }
 
 func main() {
-	// Connect to local validator
 	rpcURL := "http://localhost:8899"
 	wsURL := "ws://localhost:8900"
 
-	// Create a new wallet
 	account := solana.NewWallet()
 	fmt.Println("Account private key:", account.PrivateKey)
 	fmt.Println("Account public key:", account.PublicKey())
 
-	// Create RPC client for initial airdrop
 	rpcClient := rpc.New(rpcURL)
 
-	// Request initial airdrop
 	fmt.Println("\n=== Requesting Initial Airdrop ===")
 	out, err := rpcClient.RequestAirdrop(
 		context.TODO(),
@@ -266,7 +305,6 @@ func main() {
 
 	time.Sleep(time.Second * 20)
 
-	// Create client
 	client, err := NewHealthLockClient(rpcURL, wsURL, account.PrivateKey)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
@@ -280,47 +318,54 @@ func main() {
 		fmt.Printf("Wallet balance: %d lamports (%.2f SOL)\n", balance.Value, float64(balance.Value)/1e9)
 	}
 
-	// === Start Tests ===
 	fmt.Println("\n=== Testing Program Existence ===")
 	if err := client.CheckProgramExists(); err != nil {
 		log.Fatalf("Program check failed: %v", err)
 	}
 
-	fmt.Println("\n=== Testing Record Counter Read (Before Initialization) ===")
-	counter, err := client.GetRecordCounter()
+	fmt.Println("\n=== Testing TEE Node Registration ===")
+
+	samplePubkey := []byte("sample_tee_public_key_12345")
+	sampleAttestation := []byte("sample_attestation_data_67890")
+
+	teeState, err := client.GetTEEState()
 	if err != nil {
-		fmt.Printf("Record counter read failed (expected if not initialized): %v\n", err)
+		fmt.Printf("TEE state read failed (expected if not registered): %v\n", err)
 	} else {
-		fmt.Printf("Record counter already exists with value: %d\n", counter.RecordId)
+		fmt.Printf("TEE node already registered for signer: %s\n", teeState.Signer)
+		fmt.Printf("TEE Pubkey: %s\n", string(teeState.Pubkey))
+		fmt.Printf("TEE Attestation: %s\n", string(teeState.Attestation))
+		fmt.Printf("Is Initialized: %t\n", teeState.IsInitialized)
 	}
 
-	// Only initialize if the counter doesn't exist
-	if counter == nil {
-		fmt.Println("\n=== Initializing Record Counter ===")
-		sig2, err := client.InitializeRecordCounter()
+	if teeState == nil {
+		fmt.Println("\n=== Registering TEE Node ===")
+		sig3, err := client.RegisterTEENode(samplePubkey, sampleAttestation)
 		if err != nil {
-			fmt.Printf("Record counter init failed: %v\n", err)
+			fmt.Printf("TEE node registration failed: %v\n", err)
 		} else {
-			fmt.Printf("Record counter initialized! Tx: %s\n", sig2)
+			fmt.Printf("TEE node registered! Tx: %s\n", sig3)
 			// Wait for this transaction to confirm
-			fmt.Println("Waiting for initialization confirmation...")
-			err = client.WaitForConfirmation(*sig2)
+			fmt.Println("Waiting for TEE registration confirmation...")
+			err = client.WaitForConfirmation(*sig3)
 			if err != nil {
-				fmt.Printf("Failed to confirm initialization: %v\n", err)
+				fmt.Printf("Failed to confirm TEE registration: %v\n", err)
 			} else {
-				fmt.Println("Record counter initialization confirmed!")
+				fmt.Println("TEE node registration confirmed!")
 			}
 		}
 	}
 
-	fmt.Println("\n=== Testing Record Counter Read (After Initialization) ===")
-	counter, err = client.GetRecordCounter()
+	fmt.Println("\n=== Testing TEE State Read (After Registration) ===")
+	teeState, err = client.GetTEEState()
 	if err != nil {
-		fmt.Printf("Record counter read failed: %v\n", err)
+		fmt.Printf("TEE state read failed: %v\n", err)
 	} else {
-		fmt.Printf("✅ Record counter successfully read!\n")
-		fmt.Printf("Current Record ID: %d\n", counter.RecordId)
-		fmt.Printf("Next available Record ID will be: %d\n", counter.RecordId+1)
+		fmt.Printf("✅ TEE state successfully read!\n")
+		fmt.Printf("Signer: %s\n", teeState.Signer)
+		fmt.Printf("TEE Pubkey: %s\n", string(teeState.Pubkey))
+		fmt.Printf("TEE Attestation: %s\n", string(teeState.Attestation))
+		fmt.Printf("Is Initialized: %t\n", teeState.IsInitialized)
 	}
 
 	fmt.Println("\n=== Test Complete ===")

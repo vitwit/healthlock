@@ -34,4 +34,7 @@ pub enum ErrorCode {
     OrganizationDeactivated,
     #[msg("Invalid organization")]
     InvalidOrganization,
+
+    #[msg("TEE node is already registered")]
+    NodeAlreadyRegistered
 }

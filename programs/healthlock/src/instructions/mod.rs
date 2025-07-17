@@ -21,3 +21,6 @@ pub use deactivate_record::*;
 
 pub mod register_organization;
 pub use register_organization::*;
+
+pub mod register_tee;
+pub use register_tee::*;
