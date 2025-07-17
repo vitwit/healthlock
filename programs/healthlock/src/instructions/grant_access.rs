@@ -8,7 +8,6 @@ pub fn grant_access(
     ctx: Context<GrantAccess>,
     _record_id: u64,
     organization_key: Pubkey,
-    access_duration: Option<i64>,
 ) -> Result<()> {
     let health_record = &mut ctx.accounts.health_record;
     let organization = &ctx.accounts.organization;
@@ -34,12 +33,6 @@ pub fn grant_access(
         ErrorCode::MaxAccessReached
     );
 
-    let expires_at = if let Some(duration) = access_duration {
-        Some(Clock::get()?.unix_timestamp + duration)
-    } else {
-        None
-    };
-
     let access_permission = AccessPermission {
         organization: organization_key,
         granted_at: Clock::get()?.unix_timestamp,
@@ -52,7 +45,6 @@ pub fn grant_access(
         record_id: health_record.record_id.to_string(),
         organization: organization_key,
         organization_name: organization.name.clone(),
-        expires_at,
         timestamp: Clock::get()?.unix_timestamp,
     });
 
