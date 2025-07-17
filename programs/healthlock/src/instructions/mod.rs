@@ -1,6 +1,3 @@
-pub mod register_user;
-pub use register_user::*;
-
 pub mod init_records;
 pub use init_records::*;
 

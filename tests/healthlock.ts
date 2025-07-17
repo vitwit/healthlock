@@ -52,21 +52,6 @@ describe('healthlock', () => {
       expect(recordCounterAccount.recordId.toNumber()).to.equal(1);
     });
 
-    it('Should initialize organization counter', async () => {
-      await program.methods
-        .initializeOrganizationCounter()
-        .accountsStrict({
-          organizationCounter: organizationCounter,
-          owner: owner.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      const organizationCounterAccount =
-        await program.account.organizationCounter.fetch(organizationCounter);
-      expect(organizationCounterAccount.organizationId.toNumber()).to.equal(1);
-    });
-
     it('Should fail to initialize record counter again', async () => {
       try {
         await program.methods
@@ -83,21 +68,6 @@ describe('healthlock', () => {
       }
     });
 
-    it('Should fail to initialize organization counter again', async () => {
-      try {
-        await program.methods
-          .initializeOrganizationCounter()
-          .accountsStrict({
-            organizationCounter: organizationCounter,
-            owner: owner.publicKey,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-        expect.fail('Should have thrown an error');
-      } catch (error) {
-        expect(error.message).to.include('already in use');
-      }
-    });
   });
 
   describe('Register Organization', () => {
@@ -108,10 +78,6 @@ describe('healthlock', () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const organizationCounterAccount =
-        await program.account.organizationCounter.fetch(organizationCounter);
-      organizationId = organizationCounterAccount.organizationId.toNumber();
-
       [organization] = PublicKey.findProgramAddressSync(
         [Buffer.from('organization'), organizationOwner.publicKey.toBuffer()],
         program.programId
@@ -120,7 +86,6 @@ describe('healthlock', () => {
       const tx = await program.methods
         .registerOrganization('Test Hospital', 'contact@testhospital.com')
         .accountsStrict({
-          organizationCounter: organizationCounter,
           organization: organization,
           owner: organizationOwner.publicKey,
           systemProgram: SystemProgram.programId,
@@ -143,14 +108,7 @@ describe('healthlock', () => {
       expect(organizationAccount.contactInfo).to.equal(
         'contact@testhospital.com'
       );
-      expect(organizationAccount.isActive).to.be.true;
       expect(organizationAccount.createdAt.toNumber()).to.be.greaterThan(0);
-
-      const updatedCounterAccount =
-        await program.account.organizationCounter.fetch(organizationCounter);
-      expect(updatedCounterAccount.organizationId.toNumber()).to.equal(
-        organizationId + 1
-      );
     });
   });
 

@@ -24,6 +24,7 @@ pub struct UpdateUserVault<'info> {
         seeds = [b"user_vault", owner.key().as_ref()],
         bump
     )]
+    
     pub user_vault: Account<'info, UserVault>,
 
     #[account(mut)]

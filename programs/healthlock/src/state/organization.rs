@@ -17,5 +17,4 @@ pub struct Organization {
     #[max_len(200)]
     pub contact_info: String,
     pub created_at: i64,
-    pub is_active: bool,
 }
