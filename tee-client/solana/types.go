@@ -4,27 +4,19 @@ import solanago "github.com/gagliardetto/solana-go"
 
 const ANCHOR_DISCRIMINATOR_SIZE = 8
 
-type RecordMetadata struct {
-	FileType    string
-	FileSize    uint64
-	Description string
-	CreatedAt   int64
-}
-
 type AccessPermission struct {
-	Organization     solanago.PublicKey
-	OrganizationName string
-	GrantedAt        int64
-	ExpiresAt        *int64 // optional
+	Organization solanago.PublicKey `borsh:"organization"`
+	GrantedAt    int64              `borsh:"granted_at"`
 }
 
 type HealthRecord struct {
-	Owner         solanago.PublicKey
-	RecordID      uint64
-	MimeType      string
-	EncryptedData []byte
-	Metadata      RecordMetadata
-	CreatedAt     int64
-	AccessList    []AccessPermission
-	IsActive      bool
+	Owner         solanago.PublicKey `borsh:"owner"`
+	RecordID      uint64             `borsh:"record_id"`
+	EncryptedData []byte             `borsh:"encrypted_data"`
+	CreatedAt     int64              `borsh:"created_at"`
+	AccessList    []AccessPermission `borsh:"access_list"`
+	MimeType      string             `borsh:"mime_type"`
+	FileSize      uint64             `borsh:"file_size"`
+	Description   string             `borsh:"description"`
+	Title         string             `borsh:"title"`
 }
