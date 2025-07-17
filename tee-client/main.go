@@ -5,16 +5,17 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gagliardetto/solana-go/rpc/ws"
+
+	"github.com/vitwit/healthlock/tee-client/cmd"
 )
 
 const (
-	PROGRAM_ID                = "5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX"
+	PROGRAM_ID                = "8X7bEsKtuLqRcEM7s7RJ9wiCwdbdQ56yZQapYX5vVfjV"
 	ANCHOR_DISCRIMINATOR_SIZE = 8
 )
 
@@ -282,91 +283,134 @@ func (c *HealthLockClient) WaitForConfirmation(sig solana.Signature) error {
 }
 
 func main() {
-	rpcURL := "http://localhost:8899"
-	wsURL := "ws://localhost:8900"
+	// 	rpcURL := "http://localhost:8899"
+	// 	wsURL := "ws://localhost:8900"
 
-	account := solana.NewWallet()
-	fmt.Println("Account private key:", account.PrivateKey)
-	fmt.Println("Account public key:", account.PublicKey())
+	// 	account := solana.NewWallet()
+	// 	fmt.Println("Account private key:", account.PrivateKey)
+	// 	fmt.Println("Account public key:", account.PublicKey())
 
-	rpcClient := rpc.New(rpcURL)
+	// 	rpcClient := rpc.New(rpcURL)
 
-	fmt.Println("\n=== Requesting Initial Airdrop ===")
-	out, err := rpcClient.RequestAirdrop(
-		context.TODO(),
-		account.PublicKey(),
-		solana.LAMPORTS_PER_SOL*1,
-		rpc.CommitmentFinalized,
-	)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Initial airdrop transaction signature:", out)
+	// 	fmt.Println("\n=== Requesting Initial Airdrop ===")
+	// 	out, err := rpcClient.RequestAirdrop(
+	// 		context.TODO(),
+	// 		account.PublicKey(),
+	// 		solana.LAMPORTS_PER_SOL*1,
+	// 		rpc.CommitmentFinalized,
+	// 	)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	fmt.Println("Initial airdrop transaction signature:", out)
 
-	time.Sleep(time.Second * 20)
+	// 	time.Sleep(time.Second * 20)
 
-	client, err := NewHealthLockClient(rpcURL, wsURL, account.PrivateKey)
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
-	}
-	defer client.Close()
+	// 	client, err := NewHealthLockClient(rpcURL, wsURL, account.PrivateKey)
+	// 	if err != nil {
+	// 		log.Fatalf("Failed to create client: %v", err)
+	// 	}
+	// 	defer client.Close()
 
-	balance, err := client.rpcClient.GetBalance(context.Background(), client.wallet.PublicKey(), rpc.CommitmentFinalized)
-	if err != nil {
-		log.Printf("Failed to get balance: %v", err)
-	} else {
-		fmt.Printf("Wallet balance: %d lamports (%.2f SOL)\n", balance.Value, float64(balance.Value)/1e9)
-	}
+	// 	balance, err := client.rpcClient.GetBalance(context.Background(), client.wallet.PublicKey(), rpc.CommitmentFinalized)
+	// 	if err != nil {
+	// 		log.Printf("Failed to get balance: %v", err)
+	// 	} else {
+	// 		fmt.Printf("Wallet balance: %d lamports (%.2f SOL)\n", balance.Value, float64(balance.Value)/1e9)
+	// 	}
 
-	fmt.Println("\n=== Testing Program Existence ===")
-	if err := client.CheckProgramExists(); err != nil {
-		log.Fatalf("Program check failed: %v", err)
-	}
+	// 	fmt.Println("\n=== Testing Program Existence ===")
+	// 	if err := client.CheckProgramExists(); err != nil {
+	// 		log.Fatalf("Program check failed: %v", err)
+	// 	}
 
-	fmt.Println("\n=== Testing TEE Node Registration ===")
+	// 	apiServer := NewApiServer(client)
+	// 	mux := RegisterHandler(apiServer)
+	// 	addr := ":8080"
+	// 	fmt.Printf("API Server listening on %s\n", addr)
+	// 	log.Fatal(http.ListenAndServe(addr, mux))
+	// }
 
-	samplePubkey := []byte("sample_tee_public_key_12345")
-	sampleAttestation := []byte("sample_attestation_data_67890")
+	// func RegisterHandler(apiServer *ApiServer) http.Handler {
+	// 	mux := http.NewServeMux()
+	// 	mux.HandleFunc("/tee/state", apiServer.GetTEEState)
+	// 	mux.HandleFunc("/tee/register", apiServer.RegisterTEENode)
+	// 	return mux
+	// }
 
-	teeState, err := client.GetTEEState()
-	if err != nil {
-		fmt.Printf("TEE state read failed (expected if not registered): %v\n", err)
-	} else {
-		fmt.Printf("TEE node already registered for signer: %s\n", teeState.Signer)
-		fmt.Printf("TEE Pubkey: %s\n", string(teeState.Pubkey))
-		fmt.Printf("TEE Attestation: %s\n", string(teeState.Attestation))
-		fmt.Printf("Is Initialized: %t\n", teeState.IsInitialized)
-	}
+	// // --- API Server Section ---
 
-	if teeState == nil {
-		fmt.Println("\n=== Registering TEE Node ===")
-		sig3, err := client.RegisterTEENode(samplePubkey, sampleAttestation)
-		if err != nil {
-			fmt.Printf("TEE node registration failed: %v\n", err)
-		} else {
-			fmt.Printf("TEE node registered! Tx: %s\n", sig3)
-			// Wait for this transaction to confirm
-			fmt.Println("Waiting for TEE registration confirmation...")
-			err = client.WaitForConfirmation(*sig3)
-			if err != nil {
-				fmt.Printf("Failed to confirm TEE registration: %v\n", err)
-			} else {
-				fmt.Println("TEE node registration confirmed!")
-			}
-		}
-	}
+	// type ApiServer struct {
+	// 	client *HealthLockClient
+	// }
 
-	fmt.Println("\n=== Testing TEE State Read (After Registration) ===")
-	teeState, err = client.GetTEEState()
-	if err != nil {
-		fmt.Printf("TEE state read failed: %v\n", err)
-	} else {
-		fmt.Printf("✅ TEE state successfully read!\n")
-		fmt.Printf("Signer: %s\n", teeState.Signer)
-		fmt.Printf("TEE Pubkey: %s\n", string(teeState.Pubkey))
-		fmt.Printf("TEE Attestation: %s\n", string(teeState.Attestation))
-		fmt.Printf("Is Initialized: %t\n", teeState.IsInitialized)
-	}
+	// func NewApiServer(hlClient *HealthLockClient) *ApiServer {
+	// 	return &ApiServer{client: hlClient}
+	// }
 
-	fmt.Println("\n=== Test Complete ===")
+	// // Updated handler (handle GET, add content-type)
+	// func (api *ApiServer) GetTEEState(w http.ResponseWriter, r *http.Request) {
+	// 	if r.Method != http.MethodGet { // Enforce GET
+	// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// 		return
+	// 	}
+	// 	state, err := api.client.GetTEEState()
+	// 	if err != nil {
+	// 		http.Error(w, fmt.Sprintf("Failed to get TEE state: %v", err), http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// 	w.Header().Set("Content-Type", "application/json")
+	// 	w.WriteHeader(http.StatusOK)
+	// 	json.NewEncoder(w).Encode(state)
+	// }
+
+	// func (api *ApiServer) RegisterTEENode(w http.ResponseWriter, r *http.Request) {
+	// 	type Request struct {
+	// 		PubKey      string `json:"pubkey"`      // base58 or hex
+	// 		Attestation string `json:"attestation"` // base64
+	// 	}
+
+	// 	var req Request
+	// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	// 		return
+	// 	}
+
+	// 	// Decode inputs
+	// 	pubkey, err := base64.StdEncoding.DecodeString(req.PubKey)
+	// 	if err != nil {
+	// 		http.Error(w, "invalid pubkey format", http.StatusBadRequest)
+	// 		return
+	// 	}
+
+	// 	attestation, err := base64.StdEncoding.DecodeString(req.Attestation)
+	// 	if err != nil {
+	// 		http.Error(w, "invalid attestation format", http.StatusBadRequest)
+	// 		return
+	// 	}
+
+	// 	// Call on-chain registration logic
+	// 	sig, err := api.client.RegisterTEENode(pubkey, attestation)
+	// 	if err != nil {
+	// 		http.Error(w, fmt.Sprintf("failed to register TEE node: %v", err), http.StatusInternalServerError)
+	// 		return
+	// 	}
+
+	// // Return success
+	// resp := map[string]string{"signature": sig.String()}
+	// w.Header().Set("Content-Type", "application/json")
+	// json.NewEncoder(w).Encode(resp)
+
+	// config, err := config.LoadConfig("example.config.toml")
+	// if err != nil {
+	// 	log.Fatalf("Error loading config: %v", err)
+	// }
+
+	// fmt.Println("Solana RPC:", config.Solana.RPC)
+	// fmt.Println("Solana WebSocket:", config.Solana.WebSocket)
+	// fmt.Println("Solana Program ID:", config.Solana.ProgramID)
+	// fmt.Println("REST Port:", config.Rest.Port)
+
+	cmd.Execute()
+
 }
