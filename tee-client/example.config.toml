@@ -1,0 +1,7 @@
+[solana]
+rpc = "https://api.mainnet-beta.solana.com"
+websocket = "wss://api.mainnet-beta.solana.com"
+program-id = "YourProgramIDHere"
+
+[rest]
+port = 8080
