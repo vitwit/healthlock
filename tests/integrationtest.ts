@@ -11,11 +11,11 @@ describe("Health Records Complete Flow Test", () => {
   const program = anchor.workspace.Healthlock as Program<Healthlock>; // Replace with your actual program name
   
   it("Should complete the entire flow: init counter, register org, upload 4 records, grant access to first 3", async () => {
-    // Test accounts
     const userKeypair = Keypair.generate();
     const organizationOwnerKeypair = Keypair.generate();
+    const organization2OwnerKeypair = Keypair.generate();
+
     
-    // Airdrop SOL to test accounts
     await provider.connection.confirmTransaction(
       await provider.connection.requestAirdrop(userKeypair.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL)
     );
@@ -24,7 +24,10 @@ describe("Health Records Complete Flow Test", () => {
       await provider.connection.requestAirdrop(organizationOwnerKeypair.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL)
     );
 
-    // Calculate PDAs
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(organization2OwnerKeypair.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL)
+    );
+
     const [recordCounterPda, recordCounterBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("record_counter")],
       program.programId
@@ -32,6 +35,11 @@ describe("Health Records Complete Flow Test", () => {
 
     const [organizationPda, organizationBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("organization"), organizationOwnerKeypair.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const [organization2Pda, organization2Bump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("organization"), organization2OwnerKeypair.publicKey.toBuffer()],
       program.programId
     );
 
@@ -61,7 +69,6 @@ describe("Health Records Complete Flow Test", () => {
       program.programId
     );
 
-    // STEP 1: Initialize record counter
     console.log("Step 1: Initializing record counter...");
     const initCounterTx = await program.methods
       .initializeRecordCounter()
@@ -75,12 +82,10 @@ describe("Health Records Complete Flow Test", () => {
 
     console.log("Initialize record counter transaction signature:", initCounterTx);
 
-    // Verify the record counter was initialized
     const recordCounterAccount = await program.account.recordCounter.fetch(recordCounterPda);
     assert.equal(recordCounterAccount.recordId.toNumber(), 1);
     console.log("✓ Record counter initialized with ID:", recordCounterAccount.recordId.toNumber());
 
-    // STEP 2: Register organization
     console.log("\nStep 2: Registering organization...");
     const organizationName = "Test Healthcare Organization";
     const contactInfo = "contact@testhealthcare.com";
@@ -103,6 +108,29 @@ describe("Health Records Complete Flow Test", () => {
     assert.equal(organizationAccount.contactInfo, contactInfo);
     assert.equal(organizationAccount.owner.toString(), organizationOwnerKeypair.publicKey.toString());
     console.log("✓ Organization registered:", organizationAccount.name);
+
+    console.log("\nRegistering organization2...");
+    const organization2Name = "Test Healthcare Organization2";
+    const contact2Info = "contact2@testhealthcare.com";
+
+    const registerOrg2Tx = await program.methods
+      .registerOrganization(organization2Name, contact2Info)
+      .accountsStrict({
+        organization: organization2Pda,
+        owner: organization2OwnerKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([organization2OwnerKeypair])
+      .rpc();
+
+    console.log("Register organization2 transaction signature:", registerOrg2Tx);
+
+    // Verify the organization2 was registered
+    const organization2Account = await program.account.organization.fetch(organization2Pda);
+    assert.equal(organization2Account.name, organization2Name);
+    assert.equal(organization2Account.contactInfo, contact2Info);
+    assert.equal(organization2Account.owner.toString(), organization2OwnerKeypair.publicKey.toString());
+    console.log("✓ Organization2 registered:", organization2Account.name);
 
     // STEP 3: Upload 4 health records
     console.log("\nStep 3: Uploading 4 health records...");
@@ -164,7 +192,6 @@ describe("Health Records Complete Flow Test", () => {
 
       console.log(`Upload health record ${i + 1} transaction signature:`, uploadTx);
 
-      // Verify the health record was uploaded
       const healthRecordAccount = await program.account.healthRecord.fetch(record.pda);
       assert.equal(healthRecordAccount.title, record.title);
       assert.equal(healthRecordAccount.description, record.description);
@@ -175,19 +202,16 @@ describe("Health Records Complete Flow Test", () => {
       console.log(`✓ Health record ${i + 1} uploaded: ${record.title}`);
     }
 
-    // Verify the user vault contains all 4 record IDs
     const userVaultAccount = await program.account.userVault.fetch(userVaultPda);
     assert.equal(userVaultAccount.recordIds.length, 4);
     assert.equal(userVaultAccount.owner.toString(), userKeypair.publicKey.toString());
     assert.equal(userVaultAccount.isActive, true);
     console.log("✓ User vault contains all 4 record IDs:", userVaultAccount.recordIds.map(id => id.toNumber()));
 
-    // Verify the record counter was incremented to 5
     const updatedRecordCounterAccount = await program.account.recordCounter.fetch(recordCounterPda);
     assert.equal(updatedRecordCounterAccount.recordId.toNumber(), 5);
     console.log("✓ Record counter incremented to:", updatedRecordCounterAccount.recordId.toNumber());
 
-    // STEP 4: Grant organization access to first 3 records only
     console.log("\nStep 4: Granting organization access to first 3 records...");
     const recordsToGrantAccess = [
       { recordId: 1, pda: healthRecord1Pda },
@@ -208,7 +232,6 @@ describe("Health Records Complete Flow Test", () => {
 
       console.log(`Grant access for record ${record.recordId} transaction signature:`, grantAccessTx);
 
-      // Verify access was granted
       const healthRecordAccount = await program.account.healthRecord.fetch(record.pda);
       assert.equal(healthRecordAccount.accessList.length, 1);
       assert.equal(healthRecordAccount.accessList[0].organization.toString(), organizationPda.toString());
@@ -216,15 +239,13 @@ describe("Health Records Complete Flow Test", () => {
       console.log(`✓ Access granted to organization for record ${record.recordId}`);
     }
 
-    // Verify the 4th record has no access granted
     const healthRecord4Account = await program.account.healthRecord.fetch(healthRecord4Pda);
     assert.equal(healthRecord4Account.accessList.length, 0);
     console.log("✓ Record 4 has no access granted (as expected)");
 
-    // FINAL VERIFICATION
+  
     console.log("\n=== Final State Verification ===");
     
-    // Check all final states
     const finalRecordCounterAccount = await program.account.recordCounter.fetch(recordCounterPda);
     const finalOrganizationAccount = await program.account.organization.fetch(organizationPda);
     const finalUserVaultAccount = await program.account.userVault.fetch(userVaultPda);
@@ -252,6 +273,39 @@ describe("Health Records Complete Flow Test", () => {
     assert.equal(record2Account.accessList.length, 1);
     assert.equal(record3Account.accessList.length, 1);
     assert.equal(record4Account.accessList.length, 0);
+
+
+    console.log("\n=== Fetching all the health records of a user ===");
+    const userHealthRecordsFiltered = await program.account.healthRecord.all([
+      {
+        memcmp: {
+          offset: 8,
+          bytes: userKeypair.publicKey.toBase58(),
+        },
+      },
+    ]);
+
+    const allHealthRecords = userHealthRecordsFiltered.map(record => ({
+      recordId: record.account.recordId.toNumber(),
+      pda: record.publicKey,
+      data: record.account
+    }));
+
+    allHealthRecords.forEach((record, index) => {
+      console.log(`\nRecords list ${JSON.stringify(record)}:`);
+    })
+
+
+    console.log("\n=== Fetching all the registered  organisations ===");
+    const allOrganizations = await program.account.organization.all();
+    
+    console.log(`\nTotal organizations registered: ${allOrganizations.length}`);
+    
+    console.log("\n🏥 All Registered Organizations:");
+    console.log("==================================");
+    allOrganizations.forEach((org, index) => {
+      console.log(`\norganizations list ${JSON.stringify(org)}:`);
+    });
     
     console.log("\n🎉 All tests passed! Complete flow executed successfully:");
   });
