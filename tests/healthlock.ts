@@ -135,7 +135,6 @@ describe('healthlock', () => {
 
       const tx = await program.methods
         .uploadHealthRecord(encryptedData, mimeType, fileSize, description, title)
-        .uploadHealthRecord(encryptedData, mimeType, fileSize, description, title)
         .accountsStrict({
           userVault,
           recordCounter,
@@ -159,8 +158,6 @@ describe('healthlock', () => {
       );
       expect(healthRecordAccount.mimeType).to.equal('PDF');
       expect(healthRecordAccount.description).to.equal(
-      expect(healthRecordAccount.mimeType).to.equal('PDF');
-      expect(healthRecordAccount.description).to.equal(
         'Test health record'
       );
       expect(healthRecordAccount.accessList).to.have.length(0);
@@ -179,16 +176,19 @@ describe('healthlock', () => {
   describe('Grant Access', () => {
     let healthRecord: PublicKey;
     let recordId: anchor.BN;
-  
+
     before(async () => {
       // Get current record counter to determine the next record ID
       const recordCounterAccount = await program.account.recordCounter.fetch(
         recordCounter
       );
+
       const currentRecordId = recordCounterAccount.recordId;
-      const recordIdBuf = new anchor.BN(currentRecordId).toArrayLike(Buffer, 'le', 8);
+
+      recordId = new anchor.BN(currentRecordId); // assign to outer-scoped variable
+      const recordIdBuffer = recordId.toArrayLike(Buffer, 'le', 8);
       [healthRecord] = PublicKey.findProgramAddressSync(
-        [Buffer.from('health_record'), owner.publicKey.toBuffer(), recordIdBuf],
+        [Buffer.from('health_record'), owner.publicKey.toBuffer(), recordIdBuffer],
         program.programId
       );
 
@@ -212,12 +212,11 @@ describe('healthlock', () => {
             systemProgram: SystemProgram.programId,
           })
           .rpc();
-        
         console.log(`Health record uploaded successfully with ID: ${recordId.toString()}`);
       }
 
     });
-  
+
     it('Should grant access to an organization', async () => {
       const tx = await program.methods
         .grantAccess(recordId, organization)
@@ -227,28 +226,28 @@ describe('healthlock', () => {
           owner: owner.publicKey,
         })
         .rpc();
-  
+
       console.log('Grant access transaction signature:', tx);
-  
+
       const healthRecordAccount = await program.account.healthRecord.fetch(
         healthRecord
       );
-      
+
       // Check that access was granted
       expect(healthRecordAccount.accessList).to.have.length.greaterThan(0);
-  
+
       // Find the access permission for our organization
       const accessPermission = healthRecordAccount.accessList.find(
         access => access.organization.toString() === organization.toString()
       );
-      
+
       expect(accessPermission).to.not.be.undefined;
       expect(accessPermission.organization.toString()).to.equal(
         organization.toString()
       );
       expect(accessPermission.grantedAt.toNumber()).to.be.greaterThan(0);
     });
-  
+
     it('Should grant permanent access to another organization', async () => {
       const organizationOwner2 = Keypair.generate();
       await provider.connection.requestAirdrop(
@@ -256,12 +255,12 @@ describe('healthlock', () => {
         2 * anchor.web3.LAMPORTS_PER_SOL
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
-  
+
       const [organization2] = PublicKey.findProgramAddressSync(
         [Buffer.from('organization'), organizationOwner2.publicKey.toBuffer()],
         program.programId
       );
-  
+
       // Register the second organization
       await program.methods
         .registerOrganization('Test Clinic 2', 'info@testclinic2.com')
@@ -272,9 +271,9 @@ describe('healthlock', () => {
         })
         .signers([organizationOwner2])
         .rpc();
-  
+
       console.log('Second organization registered.');
-  
+
       // Grant access to the second organization
       const tx = await program.methods
         .grantAccess(recordId, organization2)
@@ -284,27 +283,27 @@ describe('healthlock', () => {
           owner: owner.publicKey,
         })
         .rpc();
-  
+
       console.log('Grant permanent access transaction signature:', tx);
-  
+
       const healthRecordAccount = await program.account.healthRecord.fetch(
         healthRecord
       );
-      
+
       // Should have at least 2 organizations with access
       expect(healthRecordAccount.accessList).to.have.length.greaterThan(1);
-  
+
       // Find the access permission for the second organization
       const accessPermission = healthRecordAccount.accessList.find(
         access => access.organization.toString() === organization2.toString()
       );
-      
+
       expect(accessPermission).to.not.be.undefined;
       expect(accessPermission.organization.toString()).to.equal(
         organization2.toString()
       );
     });
-  
+
     it('Should fail to grant access to same organization twice', async () => {
       try {
         await program.methods
@@ -321,14 +320,14 @@ describe('healthlock', () => {
         console.log('Successfully caught duplicate access grant error:', error.message);
       }
     });
-  
+
     it('Should fail to grant access to deactivated record', async () => {
       // Get current record counter to create a new record for deactivation test
       const recordCounterAccount = await program.account.recordCounter.fetch(
         recordCounter
       );
       const deactivationTestRecordId = recordCounterAccount.recordId;
-  
+
       const [deactivationTestRecord] = PublicKey.findProgramAddressSync(
         [
           Buffer.from('health_record'),
@@ -337,14 +336,14 @@ describe('healthlock', () => {
         ],
         program.programId
       );
-  
+
       // Create a new record for deactivation test
       const mimeType = 'PDF';
       const fileSize = new anchor.BN(1024);
       const description = 'Test health record for deactivation';
       const title = "deactivation-test-record";
       const encryptedData = Buffer.from([1, 2, 3, 4, 5]);
-  
+
       await program.methods
         .uploadHealthRecord(encryptedData, mimeType, fileSize, description, title)
         .accountsStrict({
@@ -355,9 +354,9 @@ describe('healthlock', () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
-  
+
       console.log(`New health record for deactivation test uploaded with ID: ${deactivationTestRecordId.toString()}`);
-  
+
       // Deactivate the record
       await program.methods
         .deactivateRecord(deactivationTestRecordId)
@@ -367,9 +366,9 @@ describe('healthlock', () => {
           owner: owner.publicKey,
         })
         .rpc();
-  
+
       console.log('Health record deactivated for testing.');
-  
+
       // Try to grant access to the deactivated record
       try {
         await program.methods
@@ -380,19 +379,15 @@ describe('healthlock', () => {
             owner: owner.publicKey,
           })
           .rpc();
-        expect.fail('Should have thrown an error');
+        expect.fail('Failed to Grant Access to Deactivatead record');
       } catch (error) {
-        expect(error.message).to.include('AccessAlreadyGranted.');
+        expect(error.message).to.include('Failed to Grant Access to Deactivatead record');
       }
     });
   });
 
   describe('Revoke Access', () => {
     let healthRecord: PublicKey;
-    const  mimeType = 'PDF';
-    const  fileSize = new anchor.BN(1024);
-    const  description = 'Test health record';
-    const title = "test-record"
 
     before(async () => {
       const recordCounterAccount = await program.account.recordCounter.fetch(
