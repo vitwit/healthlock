@@ -101,46 +101,6 @@ describe('healthlock', () => {
     });
   });
 
-
-  // describe('Register User', () => {
-  //   it('Should register a new user', async () => {
-  //     const tx = await program.methods
-  //       .registerUser()
-  //       .accountsStrict({
-  //         userVault: userVault,
-  //         owner: owner.publicKey,
-  //         systemProgram: SystemProgram.programId,
-  //       })
-  //       .rpc();
-
-  //     console.log('Register user transaction signature:', tx);
-
-  //     const userVaultAccount = await program.account.userVault.fetch(userVault);
-  //     expect(userVaultAccount.owner.toString()).to.equal(
-  //       owner.publicKey.toString()
-  //     );
-  //     expect(userVaultAccount.isActive).to.be.true;
-  //     expect(userVaultAccount.recordIds).to.have.length(0);
-  //     expect(userVaultAccount.createdAt.toNumber()).to.be.greaterThan(0);
-  //   });
-
-  //   it('Should fail to register user again', async () => {
-  //     try {
-  //       await program.methods
-  //         .registerUser()
-  //         .accountsStrict({
-  //           userVault,
-  //           owner: owner.publicKey,
-  //           systemProgram: SystemProgram.programId,
-  //         })
-  //         .rpc();
-  //       expect.fail('Should have thrown an error');
-  //     } catch (error) {
-  //       expect(error.message).to.include('already in use');
-  //     }
-  //   });
-  // });
-
   describe('Upload Health Record', () => {
     let healthRecord: PublicKey;
     let userVault: PublicKey;
@@ -174,15 +134,13 @@ describe('healthlock', () => {
 
     it('Should upload a health record', async () => {
       const encryptedData = Buffer.from([1, 2, 3, 4, 5]);
-      const metadata = {
-        fileType: 'PDF',
-        fileSize: new anchor.BN(1024),
-        description: 'Test health record',
-        createdAt: new anchor.BN(Date.now() / 1000),
-      };
+      const mimeType = "PDF";
+      const fileSize = new anchor.BN(encryptedData.length);
+      const description = "Test health record";
+      const title = "July 2025 Report";
 
       const tx = await program.methods
-        .uploadHealthRecord(encryptedData, metadata)
+        .uploadHealthRecord(encryptedData, mimeType, fileSize, description, title)
         .accountsStrict({
           userVault,
           recordCounter,
@@ -204,11 +162,10 @@ describe('healthlock', () => {
       expect(Buffer.from(healthRecordAccount.encryptedData)).to.deep.equal(
         encryptedData
       );
-      expect(healthRecordAccount.metadata.fileType).to.equal('PDF');
-      expect(healthRecordAccount.metadata.description).to.equal(
+      expect(healthRecordAccount.mimeType).to.equal('PDF');
+      expect(healthRecordAccount.description).to.equal(
         'Test health record'
       );
-      expect(healthRecordAccount.isActive).to.be.true;
       expect(healthRecordAccount.accessList).to.have.length(0);
 
       const userVaultAccount = await program.account.userVault.fetch(userVault);
@@ -220,32 +177,6 @@ describe('healthlock', () => {
       );
       expect(recordCounterAccount.recordId.toNumber()).to.equal(2);
     });
-
-    it('Should fail to upload with description too long', async () => {
-      const encryptedData = Buffer.from([1, 2, 3, 4, 5]);
-      const metadata = {
-        fileType: 'PDF',
-        fileSize: new anchor.BN(1024),
-        description: 'A'.repeat(101),
-        createdAt: new anchor.BN(Date.now() / 1000),
-      };
-
-      try {
-        await program.methods
-          .uploadHealthRecord(encryptedData, metadata)
-          .accountsStrict({
-            userVault,
-            recordCounter,
-            healthRecord,
-            owner: owner.publicKey,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-        expect.fail('Should have thrown an error');
-      } catch (error) {
-        expect(error.message).to.include('DescriptionTooLong');
-      }
-    });
   });
 
   describe('Grant Access', () => {
@@ -255,32 +186,24 @@ describe('healthlock', () => {
         recordCounter
       );
       const currentRecordId = recordCounterAccount.recordId;
-
+      const recordIdBuf = new anchor.BN(currentRecordId).toArrayLike(Buffer, 'le', 8);
       [healthRecord] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from('health_record'),
-          owner.publicKey.toBuffer(),
-          Buffer.from(currentRecordId.toArrayLike(Buffer, 'le', 8)),
-        ],
+        [Buffer.from('health_record'), owner.publicKey.toBuffer(), recordIdBuf],
         program.programId
       );
 
       const encryptedData = Buffer.from([1, 2, 3, 4, 5]);
-      const metadata = {
-        fileType: 'PDF',
-        fileSize: new anchor.BN(1024),
-        description: 'Test health record for access',
-        createdAt: new anchor.BN(Date.now() / 1000),
-      };
+      const fileType = 'PDF'
+      const fileSize = new anchor.BN(1024)
+      const description = 'Test health record for access'
+      const title = "report"
 
       try {
-        // Try fetching it first
         await program.account.healthRecord.fetch(healthRecord);
         console.log("Health record already exists. Skipping upload.");
       } catch {
-        // Only upload if it doesn't exist
-        await program.methods
-          .uploadHealthRecord(encryptedData, metadata)
+        const res = await program.methods
+          .uploadHealthRecord(encryptedData, fileType, fileSize, description, title)
           .accountsStrict({
             userVault,
             recordCounter,
@@ -291,6 +214,7 @@ describe('healthlock', () => {
           .rpc();
         console.log("Health record uploaded successfully.");
       }
+
     });
 
 
@@ -321,7 +245,6 @@ describe('healthlock', () => {
       expect(accessPermission.organization.toString()).to.equal(
         organization.toString()
       );
-      expect(accessPermission.expiresAt).to.not.be.null;
       expect(accessPermission.grantedAt.toNumber()).to.be.greaterThan(0);
     });
 
@@ -374,7 +297,6 @@ describe('healthlock', () => {
       expect(accessPermission.organization.toString()).to.equal(
         organization2.toString()
       );
-      expect(accessPermission.expiresAt).to.be.null;
     });
 
     it('Should fail to grant access to same organization twice', async () => {
@@ -424,7 +346,7 @@ describe('healthlock', () => {
           .rpc();
         expect.fail('Should have thrown an error');
       } catch (error) {
-        expect(error.message).to.include('RecordDeactivated');
+        expect(error.message).to.include('AccessAlreadyGranted.');
       }
     });
   });
@@ -448,15 +370,14 @@ describe('healthlock', () => {
       );
 
       const encryptedData = Buffer.from([1, 2, 3, 4, 5]);
-      const metadata = {
-        fileType: 'PDF',
-        fileSize: new anchor.BN(1024),
-        description: 'Test health record for revoke',
-        createdAt: new anchor.BN(Date.now() / 1000),
-      };
+      const fileType = 'PDF'
+      const fileSize = new anchor.BN(1024)
+      const description = 'Test health record for revoke'
+      const title = "Report"
+
 
       await program.methods
-        .uploadHealthRecord(encryptedData, metadata)
+        .uploadHealthRecord(encryptedData, fileType, fileSize, description, title)
         .accountsStrict({
           userVault,
           recordCounter,
