@@ -19,6 +19,10 @@ pub mod healthlock {
         instructions::initialize_record_counter(ctx)
     }
 
+    pub fn register_tee(ctx: Context<RegisterTEENode>, pubkey: Vec<u8>, attestation: Vec<u8>) -> Result<()> {
+        instructions::register_tee_node(ctx, pubkey, attestation)
+    }
+
     pub fn register_user(ctx: Context<RegisterUser>) -> Result<()> {
         instructions::register_user(ctx)
     }

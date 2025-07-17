@@ -9,3 +9,6 @@ pub use health_record::*;
 
 pub mod organization;
 pub use organization::*;
+
+pub mod tee_node;
+pub use tee_node::*;
