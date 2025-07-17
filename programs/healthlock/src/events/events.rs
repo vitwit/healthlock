@@ -1,12 +1,5 @@
 use anchor_lang::prelude::*;
 
-#[event]
-pub struct UserRegistered {
-    pub owner: Pubkey,
-    pub vault: Pubkey,
-    pub timestamp: i64,
-}
-
 
 #[event]
 pub struct HealthRecordUploaded {
@@ -32,6 +25,7 @@ pub struct AccessRevoked {
     pub record_owner: Pubkey,
     pub record_id: String,
     pub organization: Pubkey,
+    pub organization_name: String,
     pub timestamp: i64,
 }
 
@@ -53,7 +47,6 @@ pub struct HealthRecordDeactivated {
 #[event]
 pub struct OrganizationRegistered {
     pub owner: Pubkey,
-    pub organization_id: u64,
     pub organization_account: Pubkey,
     pub name: String,
     pub timestamp: i64,

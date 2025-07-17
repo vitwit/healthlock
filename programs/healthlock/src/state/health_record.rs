@@ -33,5 +33,4 @@ pub struct AccessPermission {
     pub organization_name: String, // Store organization name for easy reference
     pub granted_at: i64,
     pub expires_at: Option<i64>,
-    pub is_active: bool, 
 }

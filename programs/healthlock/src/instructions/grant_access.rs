@@ -20,10 +20,6 @@ pub fn grant_access(
     );
 
     require!(
-        organization.is_active,
-        ErrorCode::OrganizationDeactivated
-    );
-    require!(
         organization.key() == organization_key,
         ErrorCode::InvalidOrganization
     );
@@ -31,7 +27,7 @@ pub fn grant_access(
     let existing_access = health_record
         .access_list
         .iter()
-        .find(|access| access.organization == organization_key && access.is_active);
+        .find(|access| access.organization == organization_key);
     require!(existing_access.is_none(), ErrorCode::AccessAlreadyGranted);
 
     require!(
@@ -50,7 +46,6 @@ pub fn grant_access(
         organization_name: organization.name.clone(), // Store org name for reference
         granted_at: Clock::get()?.unix_timestamp,
         expires_at,
-        is_active: true,
     };
 
     health_record.access_list.push(access_permission);

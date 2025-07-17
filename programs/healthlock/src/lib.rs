@@ -7,7 +7,7 @@ pub mod instructions;
 use instructions::*;
 use state::*;
 
-declare_id!("5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX");
+declare_id!("BD5UPzmwnKQ8oAhDaViS9dXopBf5wVZ57RAngCtwEdkQ");
 
 pub const ANCHOR_DESCRIMINATOR_SIZE: usize = 8;
 
@@ -21,14 +21,6 @@ pub mod healthlock {
 
     pub fn register_tee(ctx: Context<RegisterTEENode>, pubkey: Vec<u8>, attestation: Vec<u8>) -> Result<()> {
         instructions::register_tee_node(ctx, pubkey, attestation)
-    }
-
-    pub fn register_user(ctx: Context<RegisterUser>) -> Result<()> {
-        instructions::register_user(ctx)
-    }
-
-    pub fn initialize_organization_counter(ctx: Context<InitializeOrganizationCounter>) -> Result<()> {
-        instructions::initialize_organization_counter(ctx)
     }
 
     pub fn register_organization(
