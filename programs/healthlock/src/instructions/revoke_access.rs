@@ -11,7 +11,6 @@ pub fn revoke_access(
 ) -> Result<()> {
     let health_record = &mut ctx.accounts.health_record;
 
-    require!(health_record.is_active, ErrorCode::RecordDeactivated);
     require!(
         health_record.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess
@@ -23,17 +22,12 @@ pub fn revoke_access(
         .position(|access| access.organization == organization)
         .ok_or(ErrorCode::AccessNotFound)?;
 
-    let organization_name = health_record.access_list[access_index]
-        .organization_name
-        .clone();
-
     health_record.access_list.remove(access_index);
 
     emit!(AccessRevoked {
         record_owner: ctx.accounts.owner.key(),
         record_id: health_record.record_id.to_string(),
         organization,
-        organization_name,
         timestamp: Clock::get()?.unix_timestamp,
     });
 

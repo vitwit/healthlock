@@ -60,7 +60,6 @@ describe('healthlock', () => {
         expect(error.message).to.include('already in use');
       }
     });
-
   });
   describe('Register Organization', () => {
     it('Should register a new organization', async () => {
@@ -141,9 +140,11 @@ describe('healthlock', () => {
   //     }
   //   });
   // });
+
   describe('Upload Health Record', () => {
     let healthRecord: PublicKey;
     let userVault: PublicKey;
+
     const encryptedData = Buffer.from('this_is_encrypted_data');
     const metadata = {
       description: 'Blood report',
@@ -169,7 +170,55 @@ describe('healthlock', () => {
         [Buffer.from('user_vault'), owner.publicKey.toBuffer()],
         program.programId
       );
-      expect(recordCounterAccount.recordId.toNumber()).to.equal(1);
+    });
+
+    it('Should upload a health record', async () => {
+      const encryptedData = Buffer.from([1, 2, 3, 4, 5]);
+      const metadata = {
+        fileType: 'PDF',
+        fileSize: new anchor.BN(1024),
+        description: 'Test health record',
+        createdAt: new anchor.BN(Date.now() / 1000),
+      };
+
+      const tx = await program.methods
+        .uploadHealthRecord(encryptedData, metadata)
+        .accountsStrict({
+          userVault,
+          recordCounter,
+          healthRecord,
+          owner: owner.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log('Upload health record transaction signature:', tx);
+
+      const healthRecordAccount = await program.account.healthRecord.fetch(
+        healthRecord
+      );
+      expect(healthRecordAccount.owner.toString()).to.equal(
+        owner.publicKey.toString()
+      );
+      expect(healthRecordAccount.recordId.toNumber()).to.equal(1);
+      expect(Buffer.from(healthRecordAccount.encryptedData)).to.deep.equal(
+        encryptedData
+      );
+      expect(healthRecordAccount.metadata.fileType).to.equal('PDF');
+      expect(healthRecordAccount.metadata.description).to.equal(
+        'Test health record'
+      );
+      expect(healthRecordAccount.isActive).to.be.true;
+      expect(healthRecordAccount.accessList).to.have.length(0);
+
+      const userVaultAccount = await program.account.userVault.fetch(userVault);
+      expect(userVaultAccount.recordIds).to.have.length(1);
+      expect(userVaultAccount.recordIds[0].toNumber()).to.equal(1);
+
+      const recordCounterAccount = await program.account.recordCounter.fetch(
+        recordCounter
+      );
+      expect(recordCounterAccount.recordId.toNumber()).to.equal(2);
     });
 
     it('Should fail to upload with description too long', async () => {

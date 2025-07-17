@@ -34,9 +34,12 @@ pub mod healthlock {
     pub fn upload_health_record(
         ctx: Context<UploadHealthRecord>,
         encrypted_data: Vec<u8>,
-        metadata: RecordMetadata,
+        mime_type: String,
+        file_size: u64,
+        description: String,
+        title: String,
     ) -> Result<()> {
-        instructions::upload_health_record(ctx, encrypted_data, metadata)
+        instructions::upload_health_record(ctx, encrypted_data, mime_type, file_size, description, title)
     }
 
     pub fn grant_access(

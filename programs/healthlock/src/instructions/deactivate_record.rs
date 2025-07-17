@@ -16,13 +16,6 @@ pub fn deactivate_record(ctx: Context<DeactivateRecord>, _record_id: u64) -> Res
         health_record.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess
     );
-    require!(
-        health_record.is_active,
-        ErrorCode::RecordAlreadyDeactivated
-    );
-
-    // Deactivate record
-    health_record.is_active = false;
 
     // Remove record ID from user vault
     user_vault

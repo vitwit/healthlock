@@ -25,7 +25,6 @@ pub struct AccessRevoked {
     pub record_owner: Pubkey,
     pub record_id: String,
     pub organization: Pubkey,
-    pub organization_name: String,
     pub timestamp: i64,
 }
 

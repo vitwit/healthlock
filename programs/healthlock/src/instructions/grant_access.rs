@@ -13,7 +13,6 @@ pub fn grant_access(
     let health_record = &mut ctx.accounts.health_record;
     let organization = &ctx.accounts.organization;
 
-    require!(health_record.is_active, ErrorCode::RecordDeactivated);
     require!(
         health_record.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess
@@ -43,9 +42,7 @@ pub fn grant_access(
 
     let access_permission = AccessPermission {
         organization: organization_key,
-        organization_name: organization.name.clone(), // Store org name for reference
         granted_at: Clock::get()?.unix_timestamp,
-        expires_at,
     };
 
     health_record.access_list.push(access_permission);

@@ -8,15 +8,11 @@ use crate::ANCHOR_DESCRIMINATOR_SIZE;
 pub fn upload_health_record(
     ctx: Context<UploadHealthRecord>,
     encrypted_data: Vec<u8>,
-    metadata: RecordMetadata,
+    mime_type: String,
+    file_size: u64,
+    description: String,
+    title: String,
 ) -> Result<()> {
-    require!(encrypted_data.len() <= 1000, ErrorCode::RecordTooLarge);
-    require!(
-        metadata.description.len() <= 100,
-        ErrorCode::DescriptionTooLong
-    );
-    require!(metadata.file_type.len() <= 100, ErrorCode::FileTypeTooLong);
-
     let user_vault = &mut ctx.accounts.user_vault;
     let record_counter = &mut ctx.accounts.record_counter;
     let health_record = &mut ctx.accounts.health_record;
@@ -32,11 +28,13 @@ pub fn upload_health_record(
     health_record.owner = ctx.accounts.owner.key();
     health_record.record_id = record_counter.record_id;
     health_record.encrypted_data = encrypted_data;
-    health_record.metadata = metadata;
+    health_record.mime_type = mime_type;
     health_record.created_at = Clock::get()?.unix_timestamp;
     health_record.access_list = Vec::new();
-    health_record.is_active = true;
-
+    health_record.file_size = file_size;
+    health_record.title = title;
+    health_record.description = description;
+    
     user_vault.record_ids.push(record_counter.record_id);
 
     emit!(HealthRecordUploaded {
