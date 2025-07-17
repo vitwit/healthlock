@@ -46,9 +46,8 @@ pub mod healthlock {
         ctx: Context<GrantAccess>,
         record_id: u64,
         organization: Pubkey,
-        access_duration: Option<i64>,
     ) -> Result<()> {
-        instructions::grant_access(ctx, record_id, organization, access_duration)
+        instructions::grant_access(ctx, record_id, organization)
     }
 
     pub fn revoke_access(

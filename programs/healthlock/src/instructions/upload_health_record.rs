@@ -57,7 +57,7 @@ pub fn upload_health_record(
 #[derive(Accounts)]
 pub struct UploadHealthRecord<'info> {
     #[account(
-        init,
+        init_if_needed,
         payer = owner,
         space = ANCHOR_DESCRIMINATOR_SIZE + UserVault::INIT_SPACE,
         seeds = [b"user_vault", owner.key().as_ref()],

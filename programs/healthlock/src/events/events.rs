@@ -15,7 +15,6 @@ pub struct AccessGranted {
     pub record_id: String,
     pub organization: Pubkey,
     pub organization_name: String,
-    pub expires_at: Option<i64>,
     pub timestamp: i64,
 }
 
