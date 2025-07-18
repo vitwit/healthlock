@@ -14,6 +14,7 @@ describe("Health Records Complete Flow Test", () => {
     const userKeypair = Keypair.generate();
     const organizationOwnerKeypair = Keypair.generate();
     const organization2OwnerKeypair = Keypair.generate();
+    const teeNodeKeypair = Keypair.generate();
 
     
     await provider.connection.confirmTransaction(
@@ -28,6 +29,10 @@ describe("Health Records Complete Flow Test", () => {
       await provider.connection.requestAirdrop(organization2OwnerKeypair.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL)
     );
 
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(teeNodeKeypair.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL)
+    );
+
     const [recordCounterPda, recordCounterBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("record_counter")],
       program.programId
@@ -40,6 +45,11 @@ describe("Health Records Complete Flow Test", () => {
 
     const [organization2Pda, organization2Bump] = PublicKey.findProgramAddressSync(
       [Buffer.from("organization"), organization2OwnerKeypair.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const [teeStatePda, teeStateBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("state"), teeNodeKeypair.publicKey.toBuffer()],
       program.programId
     );
 
@@ -132,8 +142,32 @@ describe("Health Records Complete Flow Test", () => {
     assert.equal(organization2Account.owner.toString(), organization2OwnerKeypair.publicKey.toString());
     console.log("✓ Organization2 registered:", organization2Account.name);
 
+    console.log("\nStep 3: Registering TEE node...");
+    // Mock TEE node public key and attestation data
+    const teeNodePubkey = Buffer.from(teeNodeKeypair.publicKey.toBytes());
+    const teeNodeAttestation = Buffer.from("mock_attestation_data_for_tee_node_verification");
+
+    const registerTEETx = await program.methods
+      .registerTee(teeNodePubkey, teeNodeAttestation)
+      .accountsStrict({
+        state: teeStatePda,
+        signer: teeNodeKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([teeNodeKeypair])
+      .rpc();
+
+    console.log("Register TEE node transaction signature:", registerTEETx);
+
+    // Verify the TEE node was registered
+    const teeStateAccount = await program.account.teeState.fetch(teeStatePda);
+    assert.equal(teeStateAccount.signer.toString(), teeNodeKeypair.publicKey.toString());
+    assert.equal(teeStateAccount.isInitialized, true);
+    console.log("✓ TEE node registered with signer:", teeStateAccount.signer.toString());
+
+
     // STEP 3: Upload 4 health records
-    console.log("\nStep 3: Uploading 4 health records...");
+    console.log("\nStep 4: Uploading 4 health records...");
     const healthRecords = [
       {
         title: "Blood Test Results",
