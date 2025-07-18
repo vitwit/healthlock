@@ -1,0 +1,1 @@
+export const TEE_STATE = Buffer.from("state")
