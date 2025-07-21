@@ -6,12 +6,14 @@ import { NavigationProvider, useNavigation } from './components/providers/Naviga
 import { TextEncoder, TextDecoder } from 'text-encoding';
 
 import ConnectWalletScreen from './screens/ConnectWalletScreen';
-import HomeScreen from './screens/HomeScreen';
+import DashboardScreen from './screens/DashboardScreen';
 import UploadRecordScreen from './screens/UploadRecordScreen';
 import ViewRecordsScreen from './screens/ViewRecordsScreen';
 import OrganizationsScreen from './screens/OrganizationsScreen';
 import RegisterOrganizationScreen from './screens/RegisterOrganizationScreen';
 import ShareRecordDialogScreen from './screens/ShareRecordDialogScreen';
+import { ToastProvider } from './components/providers/ToastContext';
+import { TEEStateProvider } from './components/providers/TEEStateProvider';
 
 if (typeof global.TextEncoder === 'undefined') {
   global.TextEncoder = TextEncoder as any;
@@ -27,7 +29,7 @@ function AppNavigator() {
     case 'ConnectWallet':
       return <ConnectWalletScreen />;
     case 'Dashboard':
-      return <HomeScreen />;
+      return <DashboardScreen />;
     case 'Upload':
       return <UploadRecordScreen />;
     case 'Records':
@@ -36,7 +38,7 @@ function AppNavigator() {
     case 'Organizations':
       return <OrganizationsScreen />;
 
-      case 'ShareRecord':
+    case 'ShareRecord':
       return <ShareRecordDialogScreen />;
 
     case 'RegisterOrg':
@@ -48,13 +50,17 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'http://10.0.2.2:8899'}>
+    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'http://192.168.1.83:8899'}>
       <AuthorizationProvider>
-        <NavigationProvider>
-          <SafeAreaView style={styles.shell}>
-            <AppNavigator />
-          </SafeAreaView>
-        </NavigationProvider>
+        <TEEStateProvider>
+          <NavigationProvider>
+            <ToastProvider >
+              <SafeAreaView style={styles.shell}>
+                <AppNavigator />
+              </SafeAreaView>
+            </ToastProvider>
+          </NavigationProvider>
+        </TEEStateProvider>
       </AuthorizationProvider>
     </ConnectionProvider>
   );
@@ -62,6 +68,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   shell: {
-    height: '100%',
+    height: '100%'
   },
 });

@@ -4,16 +4,21 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '../components/providers/NavigationProvider';
-import {PublicKey, SystemProgram} from '@solana/web3.js';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { TEE_STATE } from '../util/constants';
-import {useConnection} from './../components/providers/ConnectionProvider';
+import { useConnection } from './../components/providers/ConnectionProvider';
+import { parseTEEState } from '../api/state';
 
 export default function HomeScreen() {
-  const { navigate } = useNavigation();
+  const { navigate, selectedRole } = useNavigation();
 
   const PROGRAM_ID = new PublicKey(
-    'HD5X9GyjdqEMLyjP5QsLaKAweor6KQrcqCejf3NXwxpu',
+    'BD5UPzmwnKQ8oAhDaViS9dXopBf5wVZ57RAngCtwEdkQ',
   );
+
+  useEffect(() => {
+    console.log(selectedRole)
+  }, [selectedRole]);
 
   const getTEEStatePDA = (): PublicKey => {
     const [teeStatePDA] = PublicKey.findProgramAddressSync(
@@ -23,15 +28,36 @@ export default function HomeScreen() {
     return teeStatePDA;
   };
 
-  const {connection} = useConnection();
 
-  useEffect(async () => {
-    try {
-      const globalStatePDA = getTEEStatePDA();
-      const accountInfo = await connection.getAccountInfo(globalStatePDA);
-    } finally {
+  const { connection } = useConnection();
 
-    }
+  useEffect(() => {
+
+    const x = (async () => {
+      try {
+        const globalStatePDA = getTEEStatePDA();
+        const accountInfo = await connection.getAccountInfo(globalStatePDA)
+        console.log(accountInfo)
+
+        const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+          filters: [{ dataSize: 1073 }]
+        });
+
+        for (const account of accounts) {
+          const parsed = parseTEEState(account.account.data);
+          console.log("Parsed TEE Node:", parsed);
+        }
+
+      } catch (err) {
+        console.log("err = ", err)
+
+      }
+
+
+    });
+    x()
+      .then(res => console.log("res =========>", res))
+      .catch(err => console.log("errr =======> ", err));
   }, [])
 
   return (

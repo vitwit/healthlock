@@ -17,12 +17,16 @@ interface NavigationContextType {
   goBack: () => void; // Pop the last screen
   reset: (screen: ScreenName) => void; // Reset the stack to one screen
   stack: ScreenName[]; // Expose stack if needed
+  selectedRole: 'user' | 'organization';
+  setSelectedRole: (role: 'user' | 'organization') => void;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
 export const NavigationProvider = ({ children }: { children: React.ReactNode }) => {
   const [stack, setStack] = useState<ScreenName[]>(['ConnectWallet']);
+  const [selectedRole, setSelectedRole] = useState<'user' | 'organization'>("user");
+
 
   const navigate = (screen: ScreenName) => {
     setStack((prev: any) => [...prev, screen]);
@@ -39,7 +43,7 @@ export const NavigationProvider = ({ children }: { children: React.ReactNode }) 
   const currentScreen = stack[stack.length - 1];
 
   return (
-    <NavigationContext.Provider value={{ currentScreen, navigate, goBack, reset, stack }}>
+    <NavigationContext.Provider value={{ currentScreen, navigate, goBack, reset, stack, selectedRole, setSelectedRole }}>
       {children}
     </NavigationContext.Provider>
   );

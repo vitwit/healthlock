@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,84 +6,127 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Dimensions,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {useNavigation} from '../components/providers/NavigationProvider';
-
-const {width} = Dimensions.get('window');
+import DocumentPicker from 'react-native-document-picker';
+import { useNavigation } from '../components/providers/NavigationProvider';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
+import { copyToTemp, encryptFile } from '../crypto/encrypt';
 
 const UploadRecordScreen = () => {
-  const {navigate, goBack} = useNavigation();
+  const { navigate, goBack } = useNavigation();
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  const { teeState } = useTEEContext();
 
   const handleBackPress = () => {
     goBack();
   };
 
-  const handleUpload = () => {
-    console.log('Upload & Encrypt pressed');
+  useEffect(() => {
+    if (!teeState?.pubkey) {
+
+    }
+  }, [teeState]);
+
+  const handleUpload = async () => {
+    let filePath;
+    try {
+    filePath = await copyToTemp(selectedFile.uri);
+    } catch(err: any) {
+      console.log("--------->>>", err)
+    }
+    console.log('Uploading with:', { title, description, selectedFile });
+    try {
+      console.log("PubKey = ", teeState?.pubkey)
+    const result = await encryptFile(filePath,teeState?.pubkey);
+    console.log(result)
+    } catch(err: any) {
+      console.log("-=-=-=-=-=-=-=", err)
+    }
   };
 
-  const handleFileSelect = () => {
-    console.log('File selection pressed');
+  const handleFileSelect = async () => {
+    try {
+      const res = await DocumentPicker.pick({
+        type: [DocumentPicker.types.images, DocumentPicker.types.pdf],
+        allowMultiSelection: false,
+      });
+
+      if (res && res.length > 0) {
+        setSelectedFile(res[0]);
+        console.log('Selected file:', res[0]);
+      }
+    } catch (err) {
+      if (DocumentPicker.isCancel(err)) {
+        console.log('User cancelled file picker');
+      } else {
+        console.error('Unknown error: ', err);
+      }
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#667EEA', '#764BA2']} style={styles.gradient}>
-        {/* Top App Bar */}
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-            <Icon name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.topBarTitle}>Upload Records</Text>
-        </View>
-
-        {/* Content */}
-        <View style={styles.content}>
-          <View style={styles.spacer20} />
-          <Text style={styles.title}>📤 Upload Health Records</Text>
-          <View style={styles.spacer20} />
-
-          {/* File Upload Box */}
-          <TouchableOpacity
-            style={styles.uploadBox}
-            onPress={handleFileSelect}
-            activeOpacity={0.8}>
-            <View style={styles.uploadBoxContent}>
-              <Text style={styles.fileIcon}>📁</Text>
-              <Text style={styles.uploadText}>
-                Drag & drop your health records here
-              </Text>
-              <Text style={styles.uploadSubText}>or click to browse files</Text>
+      <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+                <Icon name="arrow-back" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Upload Record</Text>
             </View>
-          </TouchableOpacity>
 
-          <View style={styles.spacer24} />
+            {/* Content */}
+            <View style={styles.content}>
+              <TextInput
+                style={styles.input}
+                placeholder="Record Title"
+                placeholderTextColor="#aaa"
+                value={title}
+                onChangeText={setTitle}
+              />
 
-          {/* TEE Security Info */}
-          <View style={styles.securityBox}>
-            <Text style={styles.securityTitle}>🔒 TEE Security</Text>
-            <Text style={styles.securityDescription}>
-              Your files are encrypted using Trusted Execution Environment (TEE)
-              technology.
-            </Text>
-          </View>
+              <TextInput
+                style={[styles.input, styles.descriptionInput]}
+                placeholder="Description"
+                placeholderTextColor="#aaa"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+              />
 
-          <View style={styles.spacer24} />
+              <TouchableOpacity style={styles.uploadBox} onPress={handleFileSelect} activeOpacity={0.9}>
+                <View style={styles.uploadBoxContent}>
+                  <Icon name="folder" size={48} color="white"></Icon>
+                  <Text style={styles.uploadText}>
+                    {selectedFile ? selectedFile.name : 'Tap to select a file'}
+                  </Text>
+                  {!selectedFile && (
+                    <Text style={styles.uploadSubText}>PDF or Image</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
 
-          {/* Upload Button */}
-          <LinearGradient
-            colors={['#4FACFE', '#00F2FE']}
-            style={styles.uploadButtonWrapper}>
-            <TouchableOpacity
-              onPress={handleUpload}
-              activeOpacity={0.9}
-              style={styles.uploadButtonInner}>
-              <Text style={styles.uploadButtonText}>Upload & Encrypt</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </View>
+              <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
+                <Icon name="cloud-upload" size={20} color="#fff" />
+                <Text style={styles.uploadButtonText}>Upload & Encrypt</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -96,99 +139,82 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
-  topBar: {
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    backgroundColor: '#667EEA',
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   backButton: {
     padding: 8,
     marginRight: 8,
   },
-  topBarTitle: {
-    fontSize: 18,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '600',
     color: 'white',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    alignItems: 'center',
   },
-  spacer20: {
-    height: 20,
-  },
-  spacer24: {
-    height: 24,
-  },
-  title: {
-    fontSize: 24,
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    padding: 14,
     color: 'white',
-    fontWeight: '500',
-    textAlign: 'center',
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  descriptionInput: {
+    height: 100,
+    textAlignVertical: 'top',
   },
   uploadBox: {
-    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
     height: 180,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 24,
   },
   uploadBoxContent: {
     alignItems: 'center',
   },
   fileIcon: {
-    fontSize: 40,
-    marginBottom: 8,
+    fontSize: 42,
     color: 'white',
+    marginBottom: 10,
   },
   uploadText: {
     color: 'white',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 4,
+    fontWeight: 500,
   },
   uploadSubText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
   },
-  securityBox: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 15,
-    padding: 16,
-  },
-  securityTitle: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  securityDescription: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  uploadButtonWrapper: {
-    width: '100%',
-    borderRadius: 26,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  uploadButtonInner: {
-    height: 52,
-    justifyContent: 'center',
+  uploadButton: {
+    flexDirection: 'row',
+    backgroundColor: '#004080',
+    borderRadius: 8,
+    padding: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   uploadButtonText: {
+    color: '#fff',
+    marginLeft: 8,
     fontSize: 16,
-    color: 'white',
-    fontWeight: '500',
   },
 });
 

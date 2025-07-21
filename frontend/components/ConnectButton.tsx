@@ -64,7 +64,7 @@ export default function ConnectButton({
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#004080',
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,

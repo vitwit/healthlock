@@ -1,112 +1,153 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   StyleSheet,
   Text,
   View,
-  Dimensions,
 } from 'react-native';
 
 import ConnectButton from '../components/ConnectButton';
 import {
   useAuthorization,
 } from '../components/providers/AuthorizationProvider';
-import AlertBanner from '../components/AlertBanner';
 
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '../components/providers/NavigationProvider';
-
-const { width } = Dimensions.get('window');
+import SelectRoleCard from '../components/SelectRoleCard';
+import { useToast } from '../components/providers/ToastContext';
 
 const ConnectWalletScreen: React.FC = () => {
 
-  const { navigate } = useNavigation();
+  const { navigate, setSelectedRole, selectedRole } = useNavigation();
 
   const { selectedAccount } = useAuthorization();
-  const [showError, setShowError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
-    console.log(selectedAccount)
     if (selectedAccount) {
       navigate('Dashboard')
     }
   }, [selectedAccount]);
 
   return (
-    <LinearGradient colors={['#667EEA', '#764BA2']} style={styles.container}>
-      <View style={styles.innerContainer}>
-        {(showError && errorMessage) && (
-          <AlertBanner message={errorMessage} type="error" />
-        )}
-        <Text style={styles.emoji}>💳</Text>
-        <Text style={styles.title}>Connect Your Solana Wallet</Text>
-        <Text style={styles.subtitle}>
-          Connect your wallet to securely manage your health records on the Solana blockchain
-        </Text>
-        <ConnectButton
+    <LinearGradient
+      colors={['#001F3F', '#003366', '#001F3F']}
+      style={styles.container}>
+      <View style={styles.wrapper}>
+        <Text style={styles.heading}>Welcome to HealthLock</Text>
+        <Text style={styles.subheading}>Choose your role to get started</Text>
 
-          onError={(message: string) => {
+        <View style={styles.cardContainer}>
+          <>
+            <SelectRoleCard
+              description='Manage your personal health records'
+              title='User'
+              icon='person-pin'
+              selected={selectedRole === "user"}
+              onPress={() => { setSelectedRole('user') }}
+            />
 
-            setShowError(true);
+            <SelectRoleCard
+              description='Access and manage records'
+              title='Organization'
+              icon='domain'
+              selected={selectedRole === "organization"}
+              onPress={() => { setSelectedRole('organization') }}
+            />
+          </>
+        </View>
 
-            setErrorMessage(message);
-
-            setTimeout(() => {
-              setShowError(false);
-              setErrorMessage('');
-            }, 3000);
-          }} />
+        <View style={styles.connectButtonWrapper}>
+          <ConnectButton
+            onError={(message: string) => {
+              toast.show({
+                message: message,
+                type: "error"
+              })
+            }}
+          />
+        </View>
       </View>
     </LinearGradient>
+
+
+
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16
   },
-  innerContainer: {
+  wrapper: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  emoji: {
-    fontSize: 80,
-    marginBottom: 24
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    width: '100%'
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.85)',
-    textAlign: 'center',
-    marginBottom: 32,
-    marginTop: 8,
-    width: '100%'
-  },
-  buttonWrapper: {
-    width: width * 0.85,
-    height: 52,
-    borderRadius: 50,
-    overflow: 'hidden'
-  },
-  button: {
-    flex: 1,
+    paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 50
   },
-  buttonText: {
-    color: '#FFFFFF',
+  heading: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subheading: {
     fontSize: 16,
-    fontWeight: 'bold'
-  }
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  cardContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  roleCard: {
+    flex: 1,
+    padding: 24,
+    marginHorizontal: 8,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  selectedCard: {
+    borderColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  cardIcon: {
+    fontSize: 36,
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 6,
+  },
+  cardDesc: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+  },
+  connectButtonWrapper: {
+    width: '100%',
+    maxWidth: 360,
+  },
+  errorBanner: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#ff4d4f',
+    borderRadius: 8,
+    width: '100%',
+  },
+  errorText: {
+    color: '#fff',
+    textAlign: 'center',
+  },
 });
 
 export default ConnectWalletScreen;

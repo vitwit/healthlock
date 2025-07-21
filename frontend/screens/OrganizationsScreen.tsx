@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -11,13 +11,21 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '../components/providers/NavigationProvider';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { sha256 } from 'js-sha256';
+import { PROGRAM_ID } from '../util/constants';
+import { PublicKey } from '@solana/web3.js';
+import bs58 from "bs58";
+import { ActivityIndicator } from 'react-native';
+
 
 
 interface Organization {
-    id: string;
+    organizationId: number;
+    owner: PublicKey;
     name: string;
     contactInfo: string;
-    registeredDate: string;
+    createdAt: number;
 }
 
 interface OrganizationCardProps {
@@ -30,35 +38,90 @@ const OrganizationCard: React.FC<OrganizationCardProps> = ({ org }) => {
             <Text style={styles.organizationName}>🏥 {org.name}</Text>
             <View style={styles.spacer4} />
             <Text style={styles.contactInfo}>📞 {org.contactInfo}</Text>
-            <Text style={styles.registeredDate}>📅 Registered on {org.registeredDate}</Text>
+            <Text style={styles.createdAt}>📅 Registered on {new Date(org.createdAt * 1000).toLocaleDateString()}</Text>
         </View>
     );
+};
+
+
+const decodeOrganization = (data: Buffer) => {
+    let offset = 8;
+
+    const owner = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+
+    const organizationId = Number(data.readBigUInt64LE(offset));
+    offset += 8;
+
+    const nameLen = data.readUInt32LE(offset);
+    offset += 4;
+    const name = data.slice(offset, offset + nameLen).toString("utf-8");
+    offset += nameLen;
+
+    const contactLen = data.readUInt32LE(offset);
+    offset += 4;
+    const contactInfo = data.slice(offset, offset + contactLen).toString("utf-8");
+    offset += contactLen;
+
+    const createdAt = Number(data.readBigInt64LE(offset));
+
+    return {
+        owner,
+        organizationId,
+        name,
+        contactInfo,
+        createdAt,
+    };
 };
 
 const OrganizationsScreen: React.FC = () => {
 
     const { navigate, goBack } = useNavigation();
 
-    const mockOrganizations: Organization[] = [
-        {
-            id: '1',
-            name: 'Apollo Hospitals',
-            contactInfo: 'apollo@example.com',
-            registeredDate: '2023-01-12',
-        },
-        {
-            id: '2',
-            name: 'Fortis Health',
-            contactInfo: 'contact@fortis.com',
-            registeredDate: '2022-07-08',
-        },
-        {
-            id: '3',
-            name: 'CloudNine Care',
-            contactInfo: 'hello@cloudnine.com',
-            registeredDate: '2024-03-20',
-        },
-    ];
+    const { connection } = useConnection();
+
+    const [organizations, setOrganizations] = useState<Organization[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+
+    function getDiscriminator(name: string): Buffer {
+        const hash = sha256.digest(`account:${name}`);
+        return Buffer.from(hash).slice(0, 8);
+    }
+
+
+    useEffect(() => {
+        const fetchOrganizations = async () => {
+            setLoading(true);
+            try {
+                const discriminator = getDiscriminator("Organization");
+
+                const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+                    filters: [
+                        {
+                            memcmp: {
+                                offset: 0,
+                                bytes: bs58.encode(discriminator),
+                            },
+                        },
+                    ],
+                });
+
+                const orgs = accounts.map((acc) => {
+                    return decodeOrganization(acc.account.data);
+                });
+
+                console.log(orgs);
+                setOrganizations(orgs);
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchOrganizations().catch(console.error);
+    }, []);
+
 
     const handleBackPress = (): void => {
         goBack();
@@ -103,13 +166,19 @@ const OrganizationsScreen: React.FC = () => {
                     <View style={styles.spacer8} />
 
                     {/* Organizations List */}
-                    <FlatList
-                        data={mockOrganizations}
-                        renderItem={renderOrganizationItem}
-                        keyExtractor={(item) => item.id}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.listContainer}
-                    />
+                    {loading ? (
+                        <View style={styles.loaderContainer}>
+                            <ActivityIndicator size="large" color="#ffffff" />
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={organizations}
+                            renderItem={renderOrganizationItem}
+                            keyExtractor={(item) => item.name}
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.listContainer}
+                        />
+                    )}
                 </View>
             </LinearGradient>
         </SafeAreaView>
@@ -178,25 +247,36 @@ const styles = StyleSheet.create({
     },
     organizationCard: {
         width: '100%',
-        marginVertical: 6,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: 12,
-        padding: 16,
+        marginVertical: 10, // slightly increased spacing between cards
+        backgroundColor: 'rgba(255, 255, 255, 0.12)',
+        borderRadius: 16, // more rounded for modern feel
+        padding: 20,       // more padding for better content breathing space
     },
+
     organizationName: {
         color: 'white',
-        fontSize: 16,
-        fontWeight: '500',
+        fontSize: 18, // increased from 16
+        fontWeight: '600',
+        marginBottom: 8, // spacing below name
     },
+
     contactInfo: {
-        color: 'rgba(255, 255, 255, 0.9)',
-        fontSize: 14,
-        marginTop: 4,
+        color: 'rgba(255, 255, 255, 0.95)',
+        fontSize: 16, // increased from 14
+        marginBottom: 4,
     },
-    registeredDate: {
-        color: 'rgba(255, 255, 255, 0.8)',
-        fontSize: 13,
+
+    createdAt: {
+        color: 'rgba(255, 255, 255, 0.85)',
+        fontSize: 14, // increased from 13
     },
+    loaderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 50,
+    },
+
 });
 
 
