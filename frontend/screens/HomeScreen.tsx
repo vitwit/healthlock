@@ -19,7 +19,7 @@ export default function HomeScreen() {
   const {navigate, selectedRole} = useNavigation();
 
   const PROGRAM_ID = new PublicKey(
-    '5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX',
+    '3PmCmPDgjUNvX9vEJDuZgaeGxuRydFVtEQcHRqsWkSA7',
   );
 
   useEffect(() => {

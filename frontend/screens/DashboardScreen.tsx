@@ -22,7 +22,6 @@ import {
   Transaction,
   SystemProgram,
   TransactionInstruction,
-  LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import {
   transact,
@@ -44,14 +43,13 @@ const DashboardScreen = () => {
   const {selectedAccount} = useAuthorization();
   const {selectedRole} = useNavigation();
 
-  console.log("account -----", selectedAccount?.publicKey.toBase58());
-
   const isUser = selectedRole === 'user';
   const isOrg = selectedRole === 'organization';
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [contactInfo, setContactInfo] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   const {navigate, goBack} = useNavigation();
   const {connection} = useConnection();
@@ -130,6 +128,10 @@ const DashboardScreen = () => {
     useState<boolean>(false);
 
   const fetchOrganization = async () => {
+    if (!publicKey) {
+      console.log('Wallet not connected. Pubkey not found!');
+      return;
+    }
     try {
       setOrganizationLoading(true);
       const result = await getOrganization(connection, publicKey);
@@ -197,51 +199,6 @@ const DashboardScreen = () => {
 
         const parsedRecords: RecordType[] = [];
 
-        setRecords([
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '1',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '6',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '2',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '3',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '4',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '5',
-            title: 'CBP Report',
-          },
-        ]);
-
         for (const acc of accounts) {
           const data = acc.account.data;
           const totalLength = data.length;
@@ -255,26 +212,28 @@ const DashboardScreen = () => {
             offset += 32;
 
             const record_id = Number(data.readBigUInt64LE(offset));
-            console.log('🔢 Record ID:', record_id);
             offset += 8;
 
-            // Skip encrypted_data
+            // Parse encrypted_data
             const encLen = data.readUInt32LE(offset);
             offset += 4;
             offset += encLen;
 
-            // Access list
+            // created_at
+            const createdAt = Number(data.readBigInt64LE(offset));
+            offset += 8;
+
+            // access_list
             let accessListLen = 0;
             const accessListStart = offset;
-
             try {
               accessListLen = data.readUInt32LE(offset);
               offset += 4;
 
-              const expectedAccessSize = accessListLen * (32 + 8);
+              const expectedAccessSize = accessListLen * (32 + 8); // Pubkey + i64
               if (offset + expectedAccessSize > totalLength) {
                 console.warn('⚠️ Skipping corrupt access list');
-                offset = accessListStart + 4; // Only skip the length field
+                offset = accessListStart + 4; // Skip only length
                 accessListLen = 0;
               } else {
                 offset += expectedAccessSize;
@@ -294,37 +253,10 @@ const DashboardScreen = () => {
             const fileSize = Number(data.readBigUInt64LE(offset));
             offset += 8;
 
-            // created_at
-            const createdAt = Number(data.readBigInt64LE(offset));
-            offset += 8;
-
-            // title
-            const titleLen = data.readUInt32LE(offset);
-            offset += 4;
-            if (offset + titleLen > totalLength) {
-              console.log(
-                '📏 titleLen =',
-                titleLen,
-                '| remaining =',
-                totalLength - offset,
-              );
-              throw new Error('Title exceeds buffer');
-            }
-            const title = data
-              .slice(offset, offset + titleLen)
-              .toString('utf-8');
-            offset += titleLen;
-
             // description
             const descLen = data.readUInt32LE(offset);
             offset += 4;
             if (offset + descLen > totalLength) {
-              console.log(
-                '📏 descLen =',
-                descLen,
-                '| remaining =',
-                totalLength - offset,
-              );
               throw new Error('Description exceeds buffer');
             }
             const description = data
@@ -332,6 +264,24 @@ const DashboardScreen = () => {
               .toString('utf-8');
             offset += descLen;
 
+            // title
+            const titleLen = data.readUInt32LE(offset);
+            offset += 4;
+            if (offset + titleLen > totalLength) {
+              throw new Error('Title exceeds buffer');
+            }
+            const title = data
+              .slice(offset, offset + titleLen)
+              .toString('utf-8');
+            offset += titleLen;
+
+            console.log('data...', {
+              id: `REC${record_id}`,
+              title,
+              description,
+              createdAt,
+              accessGrantedTo: accessListLen,
+            });
             parsedRecords.push({
               id: `REC${record_id}`,
               title,
@@ -339,13 +289,13 @@ const DashboardScreen = () => {
               createdAt,
               accessGrantedTo: accessListLen,
             });
-          } catch (err) {
+          } catch (err: any) {
             console.error('❌ Failed to parse a record:', err?.message);
           }
         }
 
         console.log('📃 Parsed records:', parsedRecords);
-        // setRecords(parsedRecords);
+        setRecords(parsedRecords);
       } catch (err) {
         console.error('Failed to fetch health records:', err);
       } finally {
@@ -456,8 +406,152 @@ const DashboardScreen = () => {
     }
   };
 
+  const handleDeleteRecord = async (recordId: string, title: string) => {
+    // Simple confirmation using Alert (you can replace with a custom modal)
+    // const confirmed = confirm(
+    //   `Are you sure you want to delete "${title}"? This action cannot be undone.`,
+    // );
+
+    // if (!confirmed) return;
+
+    try {
+      setDeleteLoading(recordId);
+      await deleteRecordTransaction(recordId);
+    } catch (error) {
+      console.error('Delete failed:', error);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const deleteRecordTransaction = useCallback(
+    async (recordId: string) => {
+      return await transact(async (wallet: Web3MobileWallet) => {
+        try {
+          const [authorizationResult, latestBlockhash] = await Promise.all([
+            authorizeSession(wallet),
+            connection.getLatestBlockhash(),
+          ]);
+
+          const userPubkey = authorizationResult.publicKey;
+
+          const numericRecordId = parseInt(recordId.replace('REC', ''));
+
+          const recordIdBuffer = Buffer.alloc(8);
+          recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
+
+          const [userVaultPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('user_vault'), userPubkey.toBuffer()],
+            PROGRAM_ID,
+          );
+
+          const [healthRecordPda] = PublicKey.findProgramAddressSync(
+            [
+              Buffer.from('health_record'),
+              userPubkey.toBuffer(),
+              recordIdBuffer,
+            ],
+            PROGRAM_ID,
+          );
+
+          // Fixed discriminator calculation
+          const discriminator = Buffer.from(
+            sha256.digest('global:deactivate_record'),
+          ).slice(0, 8);
+
+          const instructionData = Buffer.concat([
+            discriminator,
+            recordIdBuffer, // This is the _record_id parameter
+          ]);
+
+          // Accounts must match the order in your Rust struct
+          const keys = [
+            {pubkey: userVaultPda, isSigner: false, isWritable: true},
+            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+            {pubkey: userPubkey, isSigner: true, isWritable: true},
+          ];
+
+          const instruction = new TransactionInstruction({
+            keys,
+            programId: PROGRAM_ID,
+            data: instructionData,
+          });
+
+          const transaction = new Transaction({
+            ...latestBlockhash,
+            feePayer: userPubkey,
+          });
+
+          transaction.add(instruction);
+
+          const signedTxs = await wallet.signTransactions({
+            transactions: [transaction],
+          });
+
+          const txid = await connection.sendRawTransaction(
+            signedTxs[0].serialize(),
+            {
+              skipPreflight: false,
+              preflightCommitment: 'processed',
+            },
+          );
+
+          const confirmation = await connection.confirmTransaction(
+            {
+              signature: txid,
+              ...latestBlockhash,
+            },
+            'confirmed',
+          );
+
+          if (confirmation.value.err) {
+            throw new Error(
+              `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
+            );
+          }
+
+          toast.show({
+            type: 'success',
+            message: 'Record deleted successfully!',
+          });
+
+          console.log(
+            'Health record uploaded successfully:',
+            txid,
+            signedTxs[0],
+          );
+          // Refresh the records list
+          // await fetchRecords();
+
+          return signedTxs[0];
+        } catch (error: any) {
+          console.error('Delete record transaction error:', error);
+
+          let errorMessage = 'Failed to delete record';
+          if (error.message?.includes('UnauthorizedAccess')) {
+            errorMessage = 'You are not authorized to delete this record';
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+
+          toast.show({
+            type: 'error',
+            message: errorMessage,
+          });
+
+          throw error;
+        }
+      });
+    },
+    [authorizeSession, connection, toast],
+  );
+
   const renderItem = ({item}: {item: RecordType}) => (
-    <RecordCard record={item} navigate={navigate} />
+    <RecordCard
+      record={item}
+      navigate={navigate}
+      onDelete={handleDeleteRecord}
+    />
   );
 
   return (

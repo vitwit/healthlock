@@ -1,7 +1,7 @@
 [solana]
 rpc = "http://localhost:8899"
 websocket = "ws://localhost:8900"
-program-id = "5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX"
+program-id = "3PmCmPDgjUNvX9vEJDuZgaeGxuRydFVtEQcHRqsWkSA7"
 network-type = "local"
 
 [rest]

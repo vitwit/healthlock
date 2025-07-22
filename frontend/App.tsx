@@ -50,7 +50,7 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'https://40v82shj-8899.inc1.devtunnels.ms/'}>
+    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'http://10.0.2.2:8899/'}>
       <AuthorizationProvider>
         <TEEStateProvider>
           <NavigationProvider>
