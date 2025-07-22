@@ -48,6 +48,11 @@ interface RecordCounterData {
   recordId: number;
 }
 
+interface IPFSUploadResponse {
+  cid: string;
+  size: number;
+}
+
 type EncryptResult = {
   encrypted_aes_key: string;
   ciphertext: string;
@@ -75,6 +80,41 @@ const UploadRecordScreen = () => {
     }
   }, [teeState]);
 
+  const uploadToIPFS = async (enc: EncryptResult): Promise<string> => {
+    try {
+      const jsonBlob = new Blob([JSON.stringify(enc)], {
+        lastModified: new Date().getTime(),
+        type: 'application/json',
+      });
+
+      const formData = new FormData();
+      formData.append('encrypted_record.json', jsonBlob);
+
+      const response = await fetch(
+        'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add',
+        {
+          method: 'POST',
+          body: formData,
+          // No need to set headers when using FormData
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`IPFS upload failed: ${errorText}`);
+      }
+
+      const responseText = await response.text();
+      const result = JSON.parse(responseText);
+
+      console.log('Uploaded to local IPFS:', result);
+      return result.Hash;
+    } catch (error) {
+      console.error('Error uploading to local IPFS:', error);
+      throw error;
+    }
+  };
+
   const [uploadHealthRecordLoading, setUploadHealthRecordLoading] =
     useState<boolean>(false);
   const handleUpload = async () => {
@@ -85,7 +125,8 @@ const UploadRecordScreen = () => {
         selectedFile.uri,
         base64DerKey,
       );
-      await uploadHealthRecordTransaction(enc, 'pdf', 5);
+      const cid = await uploadToIPFS(enc);
+      await uploadHealthRecordTransaction(cid, 'pdf', 5);
     } catch (e: any) {
       console.error('=========================', e);
     }
@@ -117,7 +158,7 @@ const UploadRecordScreen = () => {
   const toast = useToast();
   const {authorizeSession} = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
-    async (enc: EncryptResult, mimeType: string, fileSize: number) => {
+    async (enc: string, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -174,7 +215,7 @@ const UploadRecordScreen = () => {
             PROGRAM_ID,
           );
 
-          const testEncryptedData = enc.ciphertext; // Very short encrypted data
+          const testEncryptedData = enc; // Very short encrypted data
           const testMimeType = mimeType; // Simple MIME type
           const testFileSize = fileSize; // Small file size
           const testDescription = description; // Short description

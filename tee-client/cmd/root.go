@@ -141,7 +141,7 @@ func startRESTServer(ctx *types.Context, cfg *config.Config, solClient *solana.C
 	http.HandleFunc("/upload-record", UploadRecordHandler(*ctx, solClient, keyPairs))
 
 	addr := ":" + strconv.Itoa(cfg.Rest.Port)
-	fmt.Printf("Starting REST server at http://localhost%s\n", addr)
+	fmt.Printf("Starting REST server at http://localhost%s\n", ":8085")
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatalf("Failed to start REST server: %v", err)
 	}
@@ -248,6 +248,7 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 		_, _ = w.Write(plaintext)
 	}
 }
+
 func UploadRecordHandler(ctx types.Context, solClient *solana.Client, keypair *keys.KeyPair) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

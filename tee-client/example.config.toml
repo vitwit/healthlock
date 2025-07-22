@@ -5,4 +5,4 @@ program-id = "5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX"
 network-type = "local"
 
 [rest]
-port = 8080
+port = 8085
