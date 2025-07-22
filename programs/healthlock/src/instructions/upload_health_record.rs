@@ -7,7 +7,7 @@ use crate::ANCHOR_DESCRIMINATOR_SIZE;
 
 pub fn upload_health_record(
     ctx: Context<UploadHealthRecord>,
-    encrypted_data: Vec<u8>,
+    encrypted_data: String,
     mime_type: String,
     file_size: u64,
     description: String,
@@ -87,7 +87,8 @@ pub struct UploadHealthRecord<'info> {
             + 8  
             + 4  
             + 1  
-            + 100,
+            + 100
+            + 1000,
         seeds = [b"health_record", owner.key().as_ref(), record_counter.record_id.to_le_bytes().as_ref()],
         bump
     )]

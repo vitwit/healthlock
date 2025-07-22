@@ -5,8 +5,8 @@ use anchor_lang::prelude::*;
 pub struct HealthRecord {
     pub owner: Pubkey,
     pub record_id: u64,
-    #[max_len(1000)]
-    pub encrypted_data: Vec<u8>,
+    #[max_len(1048)]
+    pub encrypted_data: String,
     pub created_at: i64,
     #[max_len(100)]
     pub access_list: Vec<AccessPermission>,

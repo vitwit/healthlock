@@ -32,6 +32,7 @@ import {useConnection} from '../components/providers/ConnectionProvider';
 import {encodeAnchorString} from './DashboardScreen';
 import {useToast} from '../components/providers/ToastContext';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
+import {sha256} from '@noble/hashes/sha256';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   // Decode the PEM wrapper
@@ -119,10 +120,12 @@ const UploadRecordScreen = () => {
     async (enc: EncryptResult, mimeType: string, size: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
+          console.log('11111111111111111111111111111');
           const [authorizationResult, latestBlockhash] = await Promise.all([
             authorizeSession(wallet),
             connection.getLatestBlockhash(),
           ]);
+          console.log('2222222222222222222222');
 
           const userPubkey = authorizationResult.publicKey;
 
@@ -135,6 +138,7 @@ const UploadRecordScreen = () => {
               'Record counter account not found or not initialized',
             );
           }
+          console.log('3333333333333333333333');
 
           const recordCounter = parseRecordCounter(recordCounterAccount.data);
 
@@ -142,27 +146,31 @@ const UploadRecordScreen = () => {
             new BigUint64Array([BigInt(recordCounter.recordId)]).buffer,
           );
 
+          console.log('44444444444444444');
+
           const [healthRecordPda] = await PublicKey.findProgramAddressSync(
             [
               Buffer.from('health_record'),
-              userPubkey.publicKey.toBuffer(),
+              userPubkey.toBuffer(),
               recordIDBuffer,
             ],
             PROGRAM_ID,
           );
+          console.log('555555555555555555555555');
 
-          const discriminator = Buffer.from([
-            183, 29, 228, 76, 94, 9, 196, 137,
-          ]);
+          const discriminator = Buffer.from(
+            sha256('global:upload_health_record').slice(0, 8),
+          );
 
-          const data = Buffer.concat([
-            discriminator,
-            encodeAnchorString(enc.ciphertext),
-            encodeAnchorString(mimeType),
-            encodeAnchorString(size.toString()),
-            encodeAnchorString(description),
-            encodeAnchorString(title),
-          ]);
+          const v1 = Buffer.from('fedgfhggfhg', 'utf-8');
+          const v2 = Buffer.from(mimeType, 'utf-8');
+          const v3 = Buffer.from(new BigUint64Array([BigInt(1)]).buffer);
+          const v4 = Buffer.from(description, 'utf-8');
+          const v5 = Buffer.from(title, 'utf-8');
+
+          const data = Buffer.concat([discriminator, v1, v2, v3, v4, v5]);
+
+          console.log('6666666666666666666666666666');
 
           const keys = [
             {pubkey: healthRecordPda, isSigner: false, isWritable: true},
@@ -173,12 +181,14 @@ const UploadRecordScreen = () => {
               isWritable: false,
             },
           ];
+          console.log('777777777777777777777777');
 
           const ix = new TransactionInstruction({
             programId: PROGRAM_ID,
             keys,
             data,
           });
+          console.log('88888888888888888888888888888');
 
           const tx = new Transaction({
             ...latestBlockhash,
@@ -186,13 +196,16 @@ const UploadRecordScreen = () => {
           });
 
           tx.add(ix);
+          console.log('999999999999999999999');
 
           const signedTxs = await wallet.signTransactions({transactions: [tx]});
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
           );
+          console.log('99999999999999999999999');
 
           await connection.confirmTransaction(txid, 'confirmed');
+          console.log('11010100111000000000000000');
 
           toast.show({
             type: 'success',
@@ -201,6 +214,7 @@ const UploadRecordScreen = () => {
 
           return signedTxs[0];
         } catch (error: any) {
+          console.log('error>>>>>>>>', error);
           if (error && error.message) {
             toast.show({
               type: 'error',

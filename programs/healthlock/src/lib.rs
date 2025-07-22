@@ -33,7 +33,7 @@ pub mod healthlock {
 
     pub fn upload_health_record(
         ctx: Context<UploadHealthRecord>,
-        encrypted_data: Vec<u8>,
+        encrypted_data: String,
         mime_type: String,
         file_size: u64,
         description: String,

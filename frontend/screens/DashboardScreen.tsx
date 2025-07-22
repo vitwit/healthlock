@@ -44,6 +44,8 @@ const DashboardScreen = () => {
   const {selectedAccount} = useAuthorization();
   const {selectedRole} = useNavigation();
 
+  console.log("account -----", selectedAccount?.publicKey.toBase58());
+
   const isUser = selectedRole === 'user';
   const isOrg = selectedRole === 'organization';
 
