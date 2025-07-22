@@ -223,8 +223,19 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 			}
 		}
 
+		// Build file path: upload/<owner>/<checksum>
+		ownerAddress := recordOwnerPubkey.String()
+		filePath := filepath.Join("upload", ownerAddress, record.Checksum)
+
+		// Read encrypted file from disk
+		encryptedData, err := os.ReadFile(filePath)
+		if err != nil {
+			writeJSONError(w, "Encrypted file not found", http.StatusNotFound)
+			return
+		}
+
 		// Decrypt
-		plaintext, err := keypair.DecryptBase64Bytes(record.EncryptedData)
+		plaintext, err := keypair.DecryptFile(encryptedData)
 		if err != nil {
 			writeJSONError(w, "Decryption failed", http.StatusInternalServerError)
 			return
