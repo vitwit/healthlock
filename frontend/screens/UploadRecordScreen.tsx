@@ -117,62 +117,130 @@ const UploadRecordScreen = () => {
   const toast = useToast();
   const {authorizeSession} = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
-    async (enc: EncryptResult, mimeType: string, size: number) => {
+    async (enc: EncryptResult, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
-          console.log('11111111111111111111111111111');
           const [authorizationResult, latestBlockhash] = await Promise.all([
             authorizeSession(wallet),
             connection.getLatestBlockhash(),
           ]);
-          console.log('2222222222222222222222');
 
           const userPubkey = authorizationResult.publicKey;
 
-          const recordCounterPDA = getRecordCounterPDA();
+          const [recordCounterPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('record_counter')],
+            PROGRAM_ID,
+          );
+
+          const [userVaultPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('user_vault'), userPubkey.toBuffer()],
+            PROGRAM_ID,
+          );
+
+          // Get current record counter to determine the record ID that will be used
           const recordCounterAccount = await connection.getAccountInfo(
-            recordCounterPDA,
+            recordCounterPda,
           );
           if (!recordCounterAccount || !recordCounterAccount.data) {
             throw new Error(
-              'Record counter account not found or not initialized',
+              'Record counter account not found. Please initialize the system first.',
             );
           }
-          console.log('3333333333333333333333');
 
           const recordCounter = parseRecordCounter(recordCounterAccount.data);
+          if (!recordCounter) {
+            throw new Error('Failed to parse record counter data');
+          }
 
-          const recordIDBuffer = Buffer.from(
-            new BigUint64Array([BigInt(recordCounter.recordId)]).buffer,
-          );
+          const currentRecordId = recordCounter.recordId;
 
-          console.log('44444444444444444');
+          const recordIdBuffer = Buffer.alloc(8);
+          try {
+            recordIdBuffer.writeBigUInt64LE(BigInt(currentRecordId), 0);
+          } catch (error) {
+            console.log('writeBigUInt64LE failed, using fallback:', error);
+            // Fallback: write as two 32-bit integers (little endian)
+            const id = Number(currentRecordId);
+            recordIdBuffer.writeUInt32LE(id & 0xffffffff, 0); // Low 32 bits
+            recordIdBuffer.writeUInt32LE((id >>> 32) & 0xffffffff, 4); // High 32 bits
+          }
 
-          const [healthRecordPda] = await PublicKey.findProgramAddressSync(
+          const [healthRecordPda] = PublicKey.findProgramAddressSync(
             [
               Buffer.from('health_record'),
               userPubkey.toBuffer(),
-              recordIDBuffer,
+              recordIdBuffer,
             ],
             PROGRAM_ID,
           );
-          console.log('555555555555555555555555');
+
+          const testEncryptedData = enc.ciphertext; // Very short encrypted data
+          const testMimeType = mimeType; // Simple MIME type
+          const testFileSize = fileSize; // Small file size
+          const testDescription = description; // Short description
+          const testTitle = title; // Very short title
+
+          // Validate test data lengths (should all pass easily)
+          if (testEncryptedData.length > 1048) {
+            throw new Error('Encrypted data too large (max 1048 characters)');
+          }
+          if (testMimeType.length > 100) {
+            throw new Error('MIME type too long (max 100 characters)');
+          }
+          if (testDescription.length > 100) {
+            throw new Error('Description too long (max 100 characters)');
+          }
+          if (testTitle.length > 50) {
+            throw new Error('Title too long (max 50 characters)');
+          }
 
           const discriminator = Buffer.from(
             sha256('global:upload_health_record').slice(0, 8),
           );
 
-          const v1 = Buffer.from('fedgfhggfhg', 'utf-8');
-          const v2 = Buffer.from(mimeType, 'utf-8');
-          const v3 = Buffer.from(new BigUint64Array([BigInt(1)]).buffer);
-          const v4 = Buffer.from(description, 'utf-8');
-          const v5 = Buffer.from(title, 'utf-8');
+          const encryptedDataBytes = Buffer.from(testEncryptedData, 'utf-8');
+          const encryptedDataLengthBuffer = Buffer.alloc(4);
+          encryptedDataLengthBuffer.writeUInt32LE(encryptedDataBytes.length, 0);
 
-          const data = Buffer.concat([discriminator, v1, v2, v3, v4, v5]);
+          const mimeTypeBytes = Buffer.from(testMimeType, 'utf-8');
+          const mimeTypeLengthBuffer = Buffer.alloc(4);
+          mimeTypeLengthBuffer.writeUInt32LE(mimeTypeBytes.length, 0);
 
-          console.log('6666666666666666666666666666');
+          const fileSizeBuffer = Buffer.alloc(8);
+          fileSizeBuffer.writeBigUInt64LE(BigInt(testFileSize), 0);
 
+          const descriptionBytes = Buffer.from(testDescription, 'utf-8');
+          const descriptionLengthBuffer = Buffer.alloc(4);
+          descriptionLengthBuffer.writeUInt32LE(descriptionBytes.length, 0);
+
+          const titleBytes = Buffer.from(testTitle, 'utf-8');
+          const titleLengthBuffer = Buffer.alloc(4);
+          titleLengthBuffer.writeUInt32LE(titleBytes.length, 0);
+
+          // Combine all instruction data
+          const instructionData = Buffer.concat([
+            discriminator,
+            encryptedDataLengthBuffer,
+            encryptedDataBytes,
+            mimeTypeLengthBuffer,
+            mimeTypeBytes,
+            fileSizeBuffer,
+            descriptionLengthBuffer,
+            descriptionBytes,
+            titleLengthBuffer,
+            titleBytes,
+          ]);
+
+          console.log(
+            'Instruction data size:',
+            instructionData.length,
+            'bytes',
+          );
+
+          // Create instruction accounts matching your UploadHealthRecord struct order
           const keys = [
+            {pubkey: userVaultPda, isSigner: false, isWritable: true},
+            {pubkey: recordCounterPda, isSigner: false, isWritable: true},
             {pubkey: healthRecordPda, isSigner: false, isWritable: true},
             {pubkey: userPubkey, isSigner: true, isWritable: true},
             {
@@ -181,60 +249,110 @@ const UploadRecordScreen = () => {
               isWritable: false,
             },
           ];
-          console.log('777777777777777777777777');
 
-          const ix = new TransactionInstruction({
-            programId: PROGRAM_ID,
+          const instruction = new TransactionInstruction({
             keys,
-            data,
+            programId: PROGRAM_ID,
+            data: instructionData,
           });
-          console.log('88888888888888888888888888888');
 
-          const tx = new Transaction({
+          const transaction = new Transaction({
             ...latestBlockhash,
             feePayer: userPubkey,
           });
 
-          tx.add(ix);
-          console.log('999999999999999999999');
+          transaction.add(instruction);
 
-          const signedTxs = await wallet.signTransactions({transactions: [tx]});
+          const signedTxs = await wallet.signTransactions({
+            transactions: [transaction],
+          });
+
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
+            {
+              skipPreflight: false,
+              preflightCommitment: 'processed',
+            },
           );
-          console.log('99999999999999999999999');
 
-          await connection.confirmTransaction(txid, 'confirmed');
-          console.log('11010100111000000000000000');
+          console.log('txn111111');
+
+          const confirmation = await connection.confirmTransaction(
+            {
+              signature: txid,
+              ...latestBlockhash,
+            },
+            'confirmed',
+          );
+
+          if (confirmation.value.err) {
+            throw new Error(
+              `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
+            );
+          }
+
+          console.log('Health record uploaded successfully:', {
+            txid,
+            recordId: currentRecordId,
+            title: testTitle,
+            description: testDescription,
+            mimeType: testMimeType,
+            fileSize: testFileSize,
+            healthRecordPda: healthRecordPda.toString(),
+          });
 
           toast.show({
             type: 'success',
-            message: `Successfully registered`,
+            message: `Health record "${testTitle}" uploaded successfully!`,
           });
 
-          return signedTxs[0];
+          return {
+            transaction: signedTxs[0],
+            txid,
+            recordId: currentRecordId,
+            healthRecordPda,
+          };
         } catch (error: any) {
-          console.log('error>>>>>>>>', error);
-          if (error && error.message) {
-            toast.show({
-              type: 'error',
-              message: error.message,
-            });
-          } else if (error.response) {
-            toast.show({
-              type: 'error',
-              message: JSON.stringify(error.response),
-            });
-          } else {
-            toast.show({
-              type: 'error',
-              message: ERR_UNKNOWN,
-            });
+          console.error('Upload health record transaction error:', error);
+
+          let errorMessage = 'Failed to upload health record';
+
+          if (error.message?.includes('Record counter account not found')) {
+            errorMessage = 'System not initialized. Please contact support.';
+          } else if (error.message?.includes('insufficient funds')) {
+            errorMessage = 'Insufficient SOL balance for transaction fees';
+          } else if (error.message?.includes('blockhash not found')) {
+            errorMessage = 'Network congestion. Please try again.';
+          } else if (
+            error.message?.includes('too large') ||
+            error.message?.includes('too long')
+          ) {
+            errorMessage = error.message;
+          } else if (error.message?.includes('already in use')) {
+            errorMessage = 'Account conflict. Please refresh and try again.';
+          } else if (error.logs) {
+            const anchorError = error.logs.find(
+              (log: string) =>
+                log.includes('AnchorError') ||
+                log.includes('Program log: Error:'),
+            );
+            if (anchorError) {
+              errorMessage = `Upload failed: ${anchorError}`;
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
           }
+
+          toast.show({
+            type: 'error',
+            message: errorMessage,
+          });
+
+          throw error;
         }
       });
     },
-    [authorizeSession, connection],
+    [authorizeSession, connection, toast],
   );
 
   const handleFileSelect = async () => {

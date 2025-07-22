@@ -109,28 +109,28 @@ export class HealthLockClient {
 //     });
 //   }
 
-//   async fetchAllRecords(authority: Keypair) {
-//     console.log("\n=== Fetching all the health records of a user ===");
-//     const userHealthRecordsFiltered = await this.program.account.healthRecord.all([
-//       {
-//         memcmp: {
-//           offset: 8,
-//           bytes:"BR9X7amZQohw8qauDpzn4CzCdLxhk2zBhCRpV7YW7ikS",
-//         },
-//       },
-//     ]);
+  async fetchAllRecords(authority: Keypair) {
+    console.log("\n=== Fetching all the health records of a user ===");
+    const userHealthRecordsFiltered = await this.program.account.healthRecord.all([
+      {
+        memcmp: {
+          offset: 8,
+          bytes:"J4KG1GEthENbivCsZgJqa1SYMM2Sgpm8rcEVjy3Ka4ei",
+        },
+      },
+    ]);
 
-//     const allHealthRecords = userHealthRecordsFiltered.map(record => ({
-//       recordId: record.account.recordId.toNumber(),
-//       pda: record.publicKey,
-//       data: record.account
-//     }));
+    const allHealthRecords = userHealthRecordsFiltered.map(record => ({
+      recordId: record.account.recordId.toNumber(),
+      pda: record.publicKey,
+      data: record.account
+    }));
 
-//     allHealthRecords.forEach((record, index) => {
-//       console.log(`\nRecords list ${JSON.stringify(record)}:`);
-//     })
+    allHealthRecords.forEach((record, index) => {
+      console.log(`\nRecords list ${JSON.stringify(record)}:`);
+    })
 
-//   }
+  }
 }
 
 // ------------------------
@@ -149,11 +149,11 @@ async function main() {
   const platformWallet = authority;
   const creator = authority;
 
-  try {
-    await client.initializeRecordCounter(authority);
-  } catch (err) {
-    console.error('❌ Setup failed:', err);
-  }
+  // try {
+  //   await client.initializeRecordCounter(authority);
+  // } catch (err) {
+  //   console.error('❌ Setup failed:', err);
+  // }
 
   // try {
   //   await client.registerOrganization("test-organization", "guddu", authority);
@@ -167,11 +167,11 @@ async function main() {
 //     console.error('❌  organization Setup failed:', err);
 //   }
 
-//   try {
-//     await client.fetchAllRecords(authority);
-//   } catch (err) {
-//     console.error('❌  organization Setup failed:', err);
-//   }
+  try {
+    await client.fetchAllRecords(authority);
+  } catch (err) {
+    console.error('❌  organization Setup failed:', err);
+  }
 }
 
 function sleep(ms) {
