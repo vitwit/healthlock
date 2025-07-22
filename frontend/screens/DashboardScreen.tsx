@@ -76,6 +76,29 @@ const DashboardScreen = () => {
 
   const {teeState, setTEEState} = useTEEContext();
 
+  function parseUserVault(data: Buffer) {
+    let offset = 8; // Skip discriminator
+
+    const owner = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+
+    // Parse record_ids Vec<u64>
+    const recordIdsLen = data.readUInt32LE(offset);
+    offset += 4;
+
+    const record_ids = [];
+    for (let i = 0; i < recordIdsLen; i++) {
+      const recordId = Number(data.readBigUInt64LE(offset));
+      record_ids.push(recordId);
+      offset += 8;
+    }
+
+    return {
+      owner,
+      record_ids,
+    };
+  }
+
   const fetchTEEState = async () => {
     try {
       const globalStatePDA = getTEEStatePDA();
@@ -165,145 +188,171 @@ const DashboardScreen = () => {
     return Buffer.from(hash).slice(0, 8);
   }
 
-  useEffect(() => {
-    const fetchRecords = async () => {
-      console.log('🔍 Fetching records...');
-      if (!publicKey) {
-        console.log('inside');
+  const fetchRecords = async () => {
+    console.log('🔍 Fetching records...');
+    if (!publicKey) {
+      console.log('inside');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // First, get the user vault to see which records are active
+      const [userVaultPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('user_vault'), publicKey.toBuffer()],
+        PROGRAM_ID,
+      );
+
+      const userVaultAccount = await connection.getAccountInfo(userVaultPda);
+      if (!userVaultAccount) {
+        console.log('User vault not found');
+        setRecords([]);
         return;
       }
 
-      setLoading(true);
+      // Parse user vault to get active record IDs
+      // You'll need to implement parseUserVault similar to parseTEEState
+      const userVault = parseUserVault(userVaultAccount.data); // You need to implement this
+      const activeRecordIds = userVault.record_ids;
 
-      try {
-        const discriminator = getDiscriminator('HealthRecord');
-
-        const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-          filters: [
-            {
-              memcmp: {
-                offset: 0,
-                bytes: bs58.encode(discriminator),
-              },
-            },
-            {
-              memcmp: {
-                offset: 8, // After discriminator, owner pubkey starts
-                bytes: publicKey.toBase58(),
-              },
-            },
-          ],
-        });
-
-        console.log('✅ Accounts found:', accounts.length);
-
-        const parsedRecords: RecordType[] = [];
-
-        for (const acc of accounts) {
-          const data = acc.account.data;
-          const totalLength = data.length;
-          let offset = 8; // Skip discriminator
-
-          try {
-            console.log('📦 Record buffer length:', totalLength);
-
-            const owner = new PublicKey(data.slice(offset, offset + 32));
-            console.log('👤 Owner:', owner.toBase58());
-            offset += 32;
-
-            const record_id = Number(data.readBigUInt64LE(offset));
-            offset += 8;
-
-            // Parse encrypted_data
-            const encLen = data.readUInt32LE(offset);
-            offset += 4;
-            offset += encLen;
-
-            // created_at
-            const createdAt = Number(data.readBigInt64LE(offset));
-            offset += 8;
-
-            // access_list
-            let accessListLen = 0;
-            const accessListStart = offset;
-            try {
-              accessListLen = data.readUInt32LE(offset);
-              offset += 4;
-
-              const expectedAccessSize = accessListLen * (32 + 8); // Pubkey + i64
-              if (offset + expectedAccessSize > totalLength) {
-                console.warn('⚠️ Skipping corrupt access list');
-                offset = accessListStart + 4; // Skip only length
-                accessListLen = 0;
-              } else {
-                offset += expectedAccessSize;
-              }
-            } catch (e) {
-              console.warn('⚠️ Failed to read access list — skipping');
-              offset = accessListStart + 4;
-              accessListLen = 0;
-            }
-
-            // mime_type
-            const mimeLen = data.readUInt32LE(offset);
-            offset += 4;
-            offset += mimeLen;
-
-            // file_size
-            const fileSize = Number(data.readBigUInt64LE(offset));
-            offset += 8;
-
-            // description
-            const descLen = data.readUInt32LE(offset);
-            offset += 4;
-            if (offset + descLen > totalLength) {
-              throw new Error('Description exceeds buffer');
-            }
-            const description = data
-              .slice(offset, offset + descLen)
-              .toString('utf-8');
-            offset += descLen;
-
-            // title
-            const titleLen = data.readUInt32LE(offset);
-            offset += 4;
-            if (offset + titleLen > totalLength) {
-              throw new Error('Title exceeds buffer');
-            }
-            const title = data
-              .slice(offset, offset + titleLen)
-              .toString('utf-8');
-            offset += titleLen;
-
-            console.log('data...', {
-              id: `REC${record_id}`,
-              title,
-              description,
-              createdAt,
-              accessGrantedTo: accessListLen,
-            });
-            parsedRecords.push({
-              id: `REC${record_id}`,
-              title,
-              description,
-              createdAt,
-              accessGrantedTo: accessListLen,
-            });
-          } catch (err: any) {
-            console.error('❌ Failed to parse a record:', err?.message);
-          }
-        }
-
-        console.log('📃 Parsed records:', parsedRecords);
-        setRecords(parsedRecords);
-      } catch (err) {
-        console.error('Failed to fetch health records:', err);
-      } finally {
-        console.log('🔁 Done loading');
-        setLoading(false);
+      if (activeRecordIds.length === 0) {
+        setRecords([]);
+        return;
       }
-    };
 
+      const discriminator = getDiscriminator('HealthRecord');
+
+      const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+        filters: [
+          {
+            memcmp: {
+              offset: 0,
+              bytes: bs58.encode(discriminator),
+            },
+          },
+          {
+            memcmp: {
+              offset: 8, // After discriminator, owner pubkey starts
+              bytes: publicKey.toBase58(),
+            },
+          },
+        ],
+      });
+
+      console.log('✅ Accounts found:', accounts.length);
+
+      const parsedRecords: RecordType[] = [];
+
+      for (const acc of accounts) {
+        const data = acc.account.data;
+        const totalLength = data.length;
+        let offset = 8; // Skip discriminator
+
+        try {
+          console.log('📦 Record buffer length:', totalLength);
+
+          const owner = new PublicKey(data.slice(offset, offset + 32));
+          console.log('👤 Owner:', owner.toBase58());
+          offset += 32;
+
+          const record_id = Number(data.readBigUInt64LE(offset));
+          offset += 8;
+
+          // Only include records that are in the active list
+          if (!activeRecordIds.includes(record_id)) {
+            continue; // Skip this record as it's been deactivated
+          }
+
+          // Parse encrypted_data
+          const encLen = data.readUInt32LE(offset);
+          offset += 4;
+          offset += encLen;
+
+          // created_at
+          const createdAt = Number(data.readBigInt64LE(offset));
+          offset += 8;
+
+          // access_list
+          let accessListLen = 0;
+          const accessListStart = offset;
+          try {
+            accessListLen = data.readUInt32LE(offset);
+            offset += 4;
+
+            const expectedAccessSize = accessListLen * (32 + 8); // Pubkey + i64
+            if (offset + expectedAccessSize > totalLength) {
+              console.warn('⚠️ Skipping corrupt access list');
+              offset = accessListStart + 4; // Skip only length
+              accessListLen = 0;
+            } else {
+              offset += expectedAccessSize;
+            }
+          } catch (e) {
+            console.warn('⚠️ Failed to read access list — skipping');
+            offset = accessListStart + 4;
+            accessListLen = 0;
+          }
+
+          // mime_type
+          const mimeLen = data.readUInt32LE(offset);
+          offset += 4;
+          offset += mimeLen;
+
+          // file_size
+          const fileSize = Number(data.readBigUInt64LE(offset));
+          offset += 8;
+
+          // description
+          const descLen = data.readUInt32LE(offset);
+          offset += 4;
+          if (offset + descLen > totalLength) {
+            throw new Error('Description exceeds buffer');
+          }
+          const description = data
+            .slice(offset, offset + descLen)
+            .toString('utf-8');
+          offset += descLen;
+
+          // title
+          const titleLen = data.readUInt32LE(offset);
+          offset += 4;
+          if (offset + titleLen > totalLength) {
+            throw new Error('Title exceeds buffer');
+          }
+          const title = data.slice(offset, offset + titleLen).toString('utf-8');
+          offset += titleLen;
+
+          console.log('data...', {
+            id: `REC${record_id}`,
+            title,
+            description,
+            createdAt,
+            accessGrantedTo: accessListLen,
+          });
+          parsedRecords.push({
+            id: `REC${record_id}`,
+            title,
+            description,
+            createdAt,
+            accessGrantedTo: accessListLen,
+          });
+        } catch (err: any) {
+          console.error('❌ Failed to parse a record:', err?.message);
+        }
+      }
+
+      console.log('📃 Parsed records:', parsedRecords);
+      setRecords(parsedRecords);
+    } catch (err) {
+      console.error('Failed to fetch health records:', err);
+    } finally {
+      console.log('🔁 Done loading');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchRecords();
   }, [publicKey]);
 
@@ -521,7 +570,7 @@ const DashboardScreen = () => {
             signedTxs[0],
           );
           // Refresh the records list
-          // await fetchRecords();
+          await fetchRecords();
 
           return signedTxs[0];
         } catch (error: any) {
