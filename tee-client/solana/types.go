@@ -10,13 +10,13 @@ type AccessPermission struct {
 }
 
 type HealthRecord struct {
-	Owner         solanago.PublicKey `borsh:"owner"`
-	RecordID      uint64             `borsh:"record_id"`
-	EncryptedData []byte             `borsh:"encrypted_data"`
-	CreatedAt     int64              `borsh:"created_at"`
-	AccessList    []AccessPermission `borsh:"access_list"`
-	MimeType      string             `borsh:"mime_type"`
-	FileSize      uint64             `borsh:"file_size"`
-	Description   string             `borsh:"description"`
-	Title         string             `borsh:"title"`
+	Owner       solanago.PublicKey `borsh:"owner"`
+	RecordID    uint64             `borsh:"record_id"`
+	Checksum    string             `borsh:"checksum"`
+	CreatedAt   int64              `borsh:"created_at"`
+	AccessList  []AccessPermission `borsh:"access_list"`
+	MimeType    string             `borsh:"mime_type"`
+	FileSize    uint64             `borsh:"file_size"`
+	Description string             `borsh:"description"`
+	Title       string             `borsh:"title"`
 }

@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -135,6 +138,7 @@ func printConfigPretty(config *config.Config) {
 
 func startRESTServer(ctx *types.Context, cfg *config.Config, solClient *solana.Client, keyPairs *keys.KeyPair) {
 	http.HandleFunc("/download-record", DecryptAndServeHandler(*ctx, solClient, keyPairs))
+	http.HandleFunc("/upload-record", UploadRecordHandler(*ctx, solClient, keyPairs))
 
 	addr := ":" + strconv.Itoa(cfg.Rest.Port)
 	fmt.Printf("Starting REST server at http://localhost%s\n", addr)
@@ -219,8 +223,19 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 			}
 		}
 
+		// Build file path: upload/<owner>/<checksum>
+		ownerAddress := recordOwnerPubkey.String()
+		filePath := filepath.Join("upload", ownerAddress, record.Checksum)
+
+		// Read encrypted file from disk
+		encryptedData, err := os.ReadFile(filePath)
+		if err != nil {
+			writeJSONError(w, "Encrypted file not found", http.StatusNotFound)
+			return
+		}
+
 		// Decrypt
-		plaintext, err := keypair.DecryptBase64Bytes(record.EncryptedData)
+		plaintext, err := keypair.DecryptFile(encryptedData)
 		if err != nil {
 			writeJSONError(w, "Decryption failed", http.StatusInternalServerError)
 			return
@@ -232,4 +247,89 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(plaintext)
 	}
+}
+func UploadRecordHandler(ctx types.Context, solClient *solana.Client, keypair *keys.KeyPair) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSONError(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Limit upload size to 5MB
+		r.Body = http.MaxBytesReader(w, r.Body, 5<<20) // 5MB
+
+		// Parse multipart form (up to 5MB)
+		err := r.ParseMultipartForm(5 << 20)
+		if err != nil {
+			writeJSONError(w, "File too large or malformed form", http.StatusBadRequest)
+			return
+		}
+
+		signer := r.FormValue("signer")
+		if signer == "" {
+			writeJSONError(w, "Missing signer address", http.StatusBadRequest)
+			return
+		}
+
+		signerPubkey, err := solanago.PublicKeyFromBase58(signer)
+		if err != nil {
+			writeJSONError(w, "Invalid signer pubkey", http.StatusBadRequest)
+			return
+		}
+
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			writeJSONError(w, "Missing file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		// Read file and compute SHA-256 checksum
+		fileBytes, err := io.ReadAll(file)
+		if err != nil {
+			writeJSONError(w, "Failed to read uploaded file", http.StatusInternalServerError)
+			return
+		}
+
+		checksum := fmt.Sprintf("%x", sha256.Sum256(fileBytes))
+		dirPath := filepath.Join("upload", signerPubkey.String())
+		filePath := filepath.Join(dirPath, checksum)
+
+		// If file already exists, don't overwrite
+		if _, err := os.Stat(filePath); err == nil {
+			resp := map[string]string{
+				"checksum": checksum,
+				"path":     filePath,
+				"status":   "already exists",
+			}
+			writeJSON(w, resp)
+			return
+		}
+
+		// Ensure directory exists
+		if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+			writeJSONError(w, "Failed to create upload directory", http.StatusInternalServerError)
+			return
+		}
+
+		// Save file
+		if err := os.WriteFile(filePath, fileBytes, 0644); err != nil {
+			writeJSONError(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+
+		// Respond with checksum and storage path
+		resp := map[string]string{
+			"checksum": checksum,
+			"path":     fmt.Sprintf("upload/%s/%s", signerPubkey.String(), checksum),
+		}
+		writeJSON(w, resp)
+	}
+}
+
+// writeJSON writes a map or struct as a JSON response
+func writeJSON(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(data)
 }

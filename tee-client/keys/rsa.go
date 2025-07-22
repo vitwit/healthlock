@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+	"os"
 )
 
 type KeyPair struct {
@@ -174,4 +175,29 @@ func (kp *KeyPair) ExportPublicKeyBase64() (string, error) {
 
 func (kp *KeyPair) DecryptBase64Bytes(ciphertext []byte) ([]byte, error) {
 	return rsa.DecryptPKCS1v15(rand.Reader, kp.PrivateKey, ciphertext)
+}
+
+// ImportPrivateKeyPEM imports a PEM-formatted private key
+func ImportPrivateKeyPEM(pemData string) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(pemData))
+	if block == nil || block.Type != "RSA PRIVATE KEY" {
+		return nil, errors.New("invalid PEM private key")
+	}
+
+	return x509.ParsePKCS1PrivateKey(block.Bytes)
+}
+
+// SavePrivateKeyPEM saves an RSA private key to a file in PEM format
+func SavePrivateKeyPEM(filename string, privateKey *rsa.PrivateKey) error {
+	// Encode private key as PKCS#1 ASN.1 DER
+	privASN1 := x509.MarshalPKCS1PrivateKey(privateKey)
+
+	// Wrap in a PEM block
+	privPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privASN1,
+	})
+
+	// Write to file
+	return os.WriteFile(filename, privPEM, 0600) // restrict permissions
 }
