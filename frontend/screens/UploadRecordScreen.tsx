@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -15,8 +15,23 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DocumentPicker from 'react-native-document-picker';
-import { useNavigation } from '../components/providers/NavigationProvider';
-import { useTEEContext } from '../components/providers/TEEStateProvider';
+import {useNavigation} from '../components/providers/NavigationProvider';
+import {useTEEContext} from '../components/providers/TEEStateProvider';
+import {
+  transact,
+  Web3MobileWallet,
+} from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
+import {
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+} from '@solana/web3.js';
+import {ERR_UNKNOWN, PROGRAM_ID} from '../util/constants';
+import {useConnection} from '../components/providers/ConnectionProvider';
+import {encodeAnchorString} from './DashboardScreen';
+import {useToast} from '../components/providers/ToastContext';
+import {useAuthorization} from '../components/providers/AuthorizationProvider';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   // Decode the PEM wrapper
@@ -28,6 +43,9 @@ function extractBase64FromPemWrappedKey(base64Pem: string): string {
     .replace(/\s+/g, '');
 }
 
+interface RecordCounterData {
+  recordId: number;
+}
 
 type EncryptResult = {
   encrypted_aes_key: string;
@@ -35,16 +53,17 @@ type EncryptResult = {
   nonce: string;
 };
 
-const { Encryptor } = NativeModules;
+const {Encryptor} = NativeModules;
 
 const UploadRecordScreen = () => {
-  const { navigate, goBack } = useNavigation();
+  const {connection} = useConnection();
+  const {navigate, goBack} = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
 
-  const { teeState } = useTEEContext();
+  const {teeState} = useTEEContext();
 
   const handleBackPress = () => {
     goBack();
@@ -52,19 +71,157 @@ const UploadRecordScreen = () => {
 
   useEffect(() => {
     if (!teeState?.pubkey) {
-
     }
   }, [teeState]);
 
+  const [uploadHealthRecordLoading, setUploadHealthRecordLoading] =
+    useState<boolean>(false);
   const handleUpload = async () => {
     try {
+      setUploadHealthRecordLoading(true);
       const base64DerKey = extractBase64FromPemWrappedKey(teeState?.pubkey);
-      const enc: EncryptResult = await Encryptor.encryptFromUri(selectedFile.uri, base64DerKey);
-      console.log("======================", enc);
-    } catch (e:any) {
-      console.error("=========================", e);
+      const enc: EncryptResult = await Encryptor.encryptFromUri(
+        selectedFile.uri,
+        base64DerKey,
+      );
+      await uploadHealthRecordTransaction(enc, 'pdf', 5);
+    } catch (e: any) {
+      console.error('=========================', e);
     }
   };
+
+  const RECORD_COUNTER_SEED = Buffer.from('record_counter');
+  const getRecordCounterPDA = (): PublicKey => {
+    const [recordCounterPDA] = PublicKey.findProgramAddressSync(
+      [RECORD_COUNTER_SEED],
+      PROGRAM_ID,
+    );
+    return recordCounterPDA;
+  };
+
+  const parseRecordCounter = (data: Buffer): RecordCounterData | null => {
+    try {
+      const view = new DataView(data.buffer);
+      let offset = 8;
+
+      const recordId = Number(view.getBigUint64(offset, true));
+
+      return {recordId};
+    } catch (error) {
+      console.error('Error parsing record counter data:', error);
+      return null;
+    }
+  };
+
+  const toast = useToast();
+  const {authorizeSession} = useAuthorization();
+  const uploadHealthRecordTransaction = useCallback(
+    async (enc: EncryptResult, mimeType: string, size: number) => {
+      return await transact(async (wallet: Web3MobileWallet) => {
+        try {
+          const [authorizationResult, latestBlockhash] = await Promise.all([
+            authorizeSession(wallet),
+            connection.getLatestBlockhash(),
+          ]);
+
+          const userPubkey = authorizationResult.publicKey;
+
+          const recordCounterPDA = getRecordCounterPDA();
+          const recordCounterAccount = await connection.getAccountInfo(
+            recordCounterPDA,
+          );
+          if (!recordCounterAccount || !recordCounterAccount.data) {
+            throw new Error(
+              'Record counter account not found or not initialized',
+            );
+          }
+
+          const recordCounter = parseRecordCounter(recordCounterAccount.data);
+
+          const recordIDBuffer = Buffer.from(
+            new BigUint64Array([BigInt(recordCounter.recordId)]).buffer,
+          );
+
+          const [healthRecordPda] = await PublicKey.findProgramAddressSync(
+            [
+              Buffer.from('health_record'),
+              userPubkey.publicKey.toBuffer(),
+              recordIDBuffer,
+            ],
+            PROGRAM_ID,
+          );
+
+          const discriminator = Buffer.from([
+            183, 29, 228, 76, 94, 9, 196, 137,
+          ]);
+
+          const data = Buffer.concat([
+            discriminator,
+            encodeAnchorString(enc.ciphertext),
+            encodeAnchorString(mimeType),
+            encodeAnchorString(size.toString()),
+            encodeAnchorString(description),
+            encodeAnchorString(title),
+          ]);
+
+          const keys = [
+            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            {
+              pubkey: SystemProgram.programId,
+              isSigner: false,
+              isWritable: false,
+            },
+          ];
+
+          const ix = new TransactionInstruction({
+            programId: PROGRAM_ID,
+            keys,
+            data,
+          });
+
+          const tx = new Transaction({
+            ...latestBlockhash,
+            feePayer: userPubkey,
+          });
+
+          tx.add(ix);
+
+          const signedTxs = await wallet.signTransactions({transactions: [tx]});
+          const txid = await connection.sendRawTransaction(
+            signedTxs[0].serialize(),
+          );
+
+          await connection.confirmTransaction(txid, 'confirmed');
+
+          toast.show({
+            type: 'success',
+            message: `Successfully registered`,
+          });
+
+          return signedTxs[0];
+        } catch (error: any) {
+          if (error && error.message) {
+            toast.show({
+              type: 'error',
+              message: error.message,
+            });
+          } else if (error.response) {
+            toast.show({
+              type: 'error',
+              message: JSON.stringify(error.response),
+            });
+          } else {
+            toast.show({
+              type: 'error',
+              message: ERR_UNKNOWN,
+            });
+          }
+        }
+      });
+    },
+    [authorizeSession, connection],
+  );
 
   const handleFileSelect = async () => {
     try {
@@ -91,11 +248,15 @@ const UploadRecordScreen = () => {
       <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}>
-          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          style={{flex: 1}}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled">
             {/* Header */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+              <TouchableOpacity
+                onPress={handleBackPress}
+                style={styles.backButton}>
                 <Icon name="arrow-back" size={24} color="white" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>Upload Record</Text>
@@ -120,7 +281,10 @@ const UploadRecordScreen = () => {
                 multiline
               />
 
-              <TouchableOpacity style={styles.uploadBox} onPress={handleFileSelect} activeOpacity={0.9}>
+              <TouchableOpacity
+                style={styles.uploadBox}
+                onPress={handleFileSelect}
+                activeOpacity={0.9}>
                 <View style={styles.uploadBoxContent}>
                   <Icon name="folder" size={48} color="white"></Icon>
                   <Text style={styles.uploadText}>
@@ -132,7 +296,9 @@ const UploadRecordScreen = () => {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
+              <TouchableOpacity
+                style={styles.uploadButton}
+                onPress={handleUpload}>
                 <Icon name="cloud-upload" size={20} color="#fff" />
                 <Text style={styles.uploadButtonText}>Upload & Encrypt</Text>
               </TouchableOpacity>
