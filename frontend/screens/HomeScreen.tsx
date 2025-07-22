@@ -1,23 +1,29 @@
 import React from 'react';
-import { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import {useEffect} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation } from '../components/providers/NavigationProvider';
-import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { TEE_STATE } from '../util/constants';
-import { useConnection } from './../components/providers/ConnectionProvider';
-import { parseTEEState } from '../api/state';
+import {useNavigation} from '../components/providers/NavigationProvider';
+import {PublicKey, SystemProgram} from '@solana/web3.js';
+import {TEE_STATE} from '../util/constants';
+import {useConnection} from './../components/providers/ConnectionProvider';
+import {parseTEEState} from '../api/state';
 
 export default function HomeScreen() {
-  const { navigate, selectedRole } = useNavigation();
+  const {navigate, selectedRole} = useNavigation();
 
   const PROGRAM_ID = new PublicKey(
-    'BD5UPzmwnKQ8oAhDaViS9dXopBf5wVZ57RAngCtwEdkQ',
+    '5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX',
   );
 
   useEffect(() => {
-    console.log(selectedRole)
+    console.log(selectedRole);
   }, [selectedRole]);
 
   const getTEEStatePDA = (): PublicKey => {
@@ -28,44 +34,41 @@ export default function HomeScreen() {
     return teeStatePDA;
   };
 
-
-  const { connection } = useConnection();
+  const {connection} = useConnection();
 
   useEffect(() => {
-
-    const x = (async () => {
+    const x = async () => {
       try {
         const globalStatePDA = getTEEStatePDA();
-        const accountInfo = await connection.getAccountInfo(globalStatePDA)
-        console.log(accountInfo)
+        const accountInfo = await connection.getAccountInfo(globalStatePDA);
+        console.log(accountInfo);
 
         const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-          filters: [{ dataSize: 1073 }]
+          filters: [{dataSize: 1073}],
         });
 
         for (const account of accounts) {
           const parsed = parseTEEState(account.account.data);
-          console.log("Parsed TEE Node:", parsed);
+          console.log('Parsed TEE Node:', parsed);
         }
-
       } catch (err) {
-        console.log("err = ", err)
-
+        console.log('err = ', err);
       }
-
-
-    });
+    };
     x()
-      .then(res => console.log("res =========>", res))
-      .catch(err => console.log("errr =======> ", err));
-  }, [])
+      .then(res => console.log('res =========>', res))
+      .catch(err => console.log('errr =======> ', err));
+  }, []);
 
   return (
     <LinearGradient colors={['#667EEA', '#764BA2']} style={styles.container}>
       {/* Top Bar */}
       <View style={styles.topBar}>
         <Text style={styles.title}>HealthLock</Text>
-        <TouchableOpacity onPress={() => {/* navigate('Settings') */ }}>
+        <TouchableOpacity
+          onPress={() => {
+            /* navigate('Settings') */
+          }}>
           <Icon name="settings" size={24} color="white" />
         </TouchableOpacity>
       </View>
@@ -102,7 +105,7 @@ export default function HomeScreen() {
   );
 }
 
-function StatCard({ value, label }: { value: string; label: string }) {
+function StatCard({value, label}: {value: string; label: string}) {
   return (
     <View style={styles.statCard}>
       <Text style={styles.statValue}>{value}</Text>

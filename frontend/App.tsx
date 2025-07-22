@@ -50,7 +50,7 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'https://c601535a90a3.ngrok-free.app'}>
+    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'https://40v82shj-8899.inc1.devtunnels.ms/'}>
       <AuthorizationProvider>
         <TEEStateProvider>
           <NavigationProvider>
