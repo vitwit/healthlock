@@ -9,6 +9,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  NativeModules,
   ScrollView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -16,7 +17,25 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import DocumentPicker from 'react-native-document-picker';
 import { useNavigation } from '../components/providers/NavigationProvider';
 import { useTEEContext } from '../components/providers/TEEStateProvider';
-import { copyToTemp, encryptFile } from '../crypto/encrypt';
+
+function extractBase64FromPemWrappedKey(base64Pem: string): string {
+  // Decode the PEM wrapper
+  const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
+  // Extract only the Base64 part from the PEM
+  return pemString
+    .replace('-----BEGIN PUBLIC KEY-----', '')
+    .replace('-----END PUBLIC KEY-----', '')
+    .replace(/\s+/g, '');
+}
+
+
+type EncryptResult = {
+  encrypted_aes_key: string;
+  ciphertext: string;
+  nonce: string;
+};
+
+const { Encryptor } = NativeModules;
 
 const UploadRecordScreen = () => {
   const { navigate, goBack } = useNavigation();
@@ -38,19 +57,12 @@ const UploadRecordScreen = () => {
   }, [teeState]);
 
   const handleUpload = async () => {
-    let filePath;
     try {
-    filePath = await copyToTemp(selectedFile.uri);
-    } catch(err: any) {
-      console.log("--------->>>", err)
-    }
-    console.log('Uploading with:', { title, description, selectedFile });
-    try {
-      console.log("PubKey = ", teeState?.pubkey)
-    const result = await encryptFile(filePath,teeState?.pubkey);
-    console.log(result)
-    } catch(err: any) {
-      console.log("-=-=-=-=-=-=-=", err)
+      const base64DerKey = extractBase64FromPemWrappedKey(teeState?.pubkey);
+      const enc: EncryptResult = await Encryptor.encryptFromUri(selectedFile.uri, base64DerKey);
+      console.log("======================", enc);
+    } catch (e:any) {
+      console.error("=========================", e);
     }
   };
 
