@@ -95,7 +95,6 @@ const UploadRecordScreen = () => {
         {
           method: 'POST',
           body: formData,
-          // No need to set headers when using FormData
         },
       );
 

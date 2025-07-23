@@ -12,6 +12,7 @@ pub fn deactivate_record(ctx: Context<DeactivateRecord>, _record_id: u64) -> Res
         user_vault.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess
     );
+    
     require!(
         health_record.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess

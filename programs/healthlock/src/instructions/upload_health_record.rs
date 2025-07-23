@@ -64,7 +64,6 @@ pub struct UploadHealthRecord<'info> {
         bump
     )]
     pub user_vault: Account<'info, UserVault>,
-
     
     #[account(
         mut,
