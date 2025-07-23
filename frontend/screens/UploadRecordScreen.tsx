@@ -87,7 +87,7 @@ const UploadRecordScreen = () => {
   }
 
   const uploadToIPFS = async (enc: EncryptResult) => {
-    const url = 'https://d573e3715516.ngrok-free.app/api/v0/add';
+    const url = 'https://a61574238295.ngrok-free.app/api/v0/add';
 
     const jsonData = enc;
     const path = `${RNFS.TemporaryDirectoryPath}/data.json`;

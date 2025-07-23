@@ -261,19 +261,25 @@ const DashboardScreen = () => {
 
           // Only include records that are in the active list
           if (!activeRecordIds.includes(record_id)) {
-            continue; // Skip this record as it's been deactivated
+            continue;
           }
 
-          // Parse encrypted_data
+          // 🔐 encrypted_data
           const encLen = data.readUInt32LE(offset);
           offset += 4;
+          if (offset + encLen > totalLength) {
+            throw new Error('Encrypted data exceeds buffer');
+          }
+          const encryptedData = data
+            .slice(offset, offset + encLen)
+            .toString('utf-8');
           offset += encLen;
 
-          // created_at
+          // 🕒 created_at
           const createdAt = Number(data.readBigInt64LE(offset));
           offset += 8;
 
-          // access_list
+          // 🧾 access_list
           let accessListLen = 0;
           const accessListStart = offset;
           try {
@@ -283,7 +289,7 @@ const DashboardScreen = () => {
             const expectedAccessSize = accessListLen * (32 + 8); // Pubkey + i64
             if (offset + expectedAccessSize > totalLength) {
               console.warn('⚠️ Skipping corrupt access list');
-              offset = accessListStart + 4; // Skip only length
+              offset = accessListStart + 4;
               accessListLen = 0;
             } else {
               offset += expectedAccessSize;
@@ -294,16 +300,16 @@ const DashboardScreen = () => {
             accessListLen = 0;
           }
 
-          // mime_type
+          // 🧪 mime_type
           const mimeLen = data.readUInt32LE(offset);
           offset += 4;
           offset += mimeLen;
 
-          // file_size
+          // 📦 file_size
           const fileSize = Number(data.readBigUInt64LE(offset));
           offset += 8;
 
-          // description
+          // 📄 description
           const descLen = data.readUInt32LE(offset);
           offset += 4;
           if (offset + descLen > totalLength) {
@@ -314,7 +320,7 @@ const DashboardScreen = () => {
             .toString('utf-8');
           offset += descLen;
 
-          // title
+          // 🏷 title
           const titleLen = data.readUInt32LE(offset);
           offset += 4;
           if (offset + titleLen > totalLength) {
@@ -323,17 +329,20 @@ const DashboardScreen = () => {
           const title = data.slice(offset, offset + titleLen).toString('utf-8');
           offset += titleLen;
 
-          console.log('data...', {
+          console.log('✅ Parsed Record:', {
             id: `REC${record_id}`,
             title,
             description,
+            encryptedData,
             createdAt,
             accessGrantedTo: accessListLen,
           });
+
           parsedRecords.push({
             id: `REC${record_id}`,
             title,
             description,
+            encryptedData,
             createdAt,
             accessGrantedTo: accessListLen,
           });
