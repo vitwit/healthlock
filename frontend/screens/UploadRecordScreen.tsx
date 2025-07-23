@@ -87,7 +87,7 @@ const UploadRecordScreen = () => {
   }
 
   const uploadToIPFS = async (enc: EncryptResult) => {
-    const url = 'https://a61574238295.ngrok-free.app/api/v0/add';
+    const url = 'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add';
 
     const jsonData = enc;
     const path = `${RNFS.TemporaryDirectoryPath}/data.json`;
@@ -161,6 +161,41 @@ const UploadRecordScreen = () => {
       console.error('Error parsing record counter data:', error);
       return null;
     }
+  };
+
+  const confirmTransactionWithPolling = async (
+    txid,
+    commitment = 'confirmed',
+    timeout = 30000,
+  ) => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      try {
+        const status = await connection.getSignatureStatus(txid);
+
+        if (
+          status?.value?.confirmationStatus === commitment ||
+          status?.value?.confirmationStatus === 'finalized'
+        ) {
+          return status.value;
+        }
+
+        if (status?.value?.err) {
+          throw new Error(
+            `Transaction failed: ${JSON.stringify(status.value.err)}`,
+          );
+        }
+
+        // Wait 1 second before next poll
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.log('Polling error:', error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    throw new Error('Transaction confirmation timeout');
   };
 
   const toast = useToast();
@@ -335,19 +370,21 @@ const UploadRecordScreen = () => {
 
           console.log('txn111111');
 
-          const confirmation = await connection.confirmTransaction(
-            {
-              signature: txid,
-              ...latestBlockhash,
-            },
-            'confirmed',
-          );
+          // const confirmation = await connection.confirmTransaction(
+          //   {
+          //     signature: txid,
+          //     ...latestBlockhash,
+          //   },
+          //   'confirmed',
+          // );
 
-          if (confirmation.value.err) {
-            throw new Error(
-              `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
-            );
-          }
+          await confirmTransactionWithPolling(txid, 'confirmed');
+
+          // if (confirmation.value.err) {
+          //   throw new Error(
+          //     `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
+          //   );
+          // }
 
           console.log('Health record uploaded successfully:', {
             txid,

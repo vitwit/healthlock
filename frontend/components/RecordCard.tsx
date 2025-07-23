@@ -50,17 +50,20 @@ const RecordCard = ({
       console.log('📤 Sending download request...');
 
       // Send request to backend with specific options for React Native
-      const response = await fetch('http://10.0.2.2:8085/download-record', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        'https://40v82shj-8085.inc1.devtunnels.ms/download-record',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cid: record.encryptedData,
+            signer: recordOwner,
+            signature: signature,
+          }),
         },
-        body: JSON.stringify({
-          cid: record.encryptedData,
-          signer: recordOwner,
-          signature: signature,
-        }),
-      });
+      );
 
       console.log('📥 Response status:', response.status);
 

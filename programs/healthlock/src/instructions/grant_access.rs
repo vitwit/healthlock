@@ -10,7 +10,7 @@ pub fn grant_access(
     organization_key: Pubkey,
 ) -> Result<()> {
     let health_record = &mut ctx.accounts.health_record;
-    let organization = &ctx.accounts.organization;
+    let organization = &mut ctx.accounts.organization;
 
     require!(
         health_record.owner == ctx.accounts.owner.key(),
@@ -39,6 +39,7 @@ pub fn grant_access(
     };
 
     health_record.access_list.push(access_permission);
+    organization.record_ids.push(health_record.record_id);
 
     emit!(AccessGranted {
         record_owner: ctx.accounts.owner.key(),
@@ -69,6 +70,7 @@ pub struct GrantAccess<'info> {
     pub health_record: Account<'info, HealthRecord>,
 
     #[account(
+        mut,
         seeds = [b"organization", organization.owner.as_ref()],
         bump,
     )]

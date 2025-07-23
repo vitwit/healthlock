@@ -43,6 +43,8 @@ const DashboardScreen = () => {
   const {selectedAccount} = useAuthorization();
   const {selectedRole} = useNavigation();
 
+  console.log('address>>>>>>>>>>>>>>.', selectedAccount?.publicKey.toBase58());
+
   const isUser = selectedRole === 'user';
   const isOrg = selectedRole === 'organization';
 
@@ -77,12 +79,11 @@ const DashboardScreen = () => {
   const {teeState, setTEEState} = useTEEContext();
 
   function parseUserVault(data: Buffer) {
-    let offset = 8; // Skip discriminator
+    let offset = 8;
 
     const owner = new PublicKey(data.slice(offset, offset + 32));
     offset += 32;
 
-    // Parse record_ids Vec<u64>
     const recordIdsLen = data.readUInt32LE(offset);
     offset += 4;
 
@@ -198,7 +199,6 @@ const DashboardScreen = () => {
     setLoading(true);
 
     try {
-      // First, get the user vault to see which records are active
       const [userVaultPda] = PublicKey.findProgramAddressSync(
         [Buffer.from('user_vault'), publicKey.toBuffer()],
         PROGRAM_ID,
@@ -211,9 +211,7 @@ const DashboardScreen = () => {
         return;
       }
 
-      // Parse user vault to get active record IDs
-      // You'll need to implement parseUserVault similar to parseTEEState
-      const userVault = parseUserVault(userVaultAccount.data); // You need to implement this
+      const userVault = parseUserVault(userVaultAccount.data);
       const activeRecordIds = userVault.record_ids;
 
       if (activeRecordIds.length === 0) {
@@ -233,7 +231,7 @@ const DashboardScreen = () => {
           },
           {
             memcmp: {
-              offset: 8, // After discriminator, owner pubkey starts
+              offset: 8,
               bytes: publicKey.toBase58(),
             },
           },
@@ -247,7 +245,7 @@ const DashboardScreen = () => {
       for (const acc of accounts) {
         const data = acc.account.data;
         const totalLength = data.length;
-        let offset = 8; // Skip discriminator
+        let offset = 8;
 
         try {
           console.log('📦 Record buffer length:', totalLength);
@@ -259,12 +257,10 @@ const DashboardScreen = () => {
           const record_id = Number(data.readBigUInt64LE(offset));
           offset += 8;
 
-          // Only include records that are in the active list
           if (!activeRecordIds.includes(record_id)) {
             continue;
           }
 
-          // 🔐 encrypted_data
           const encLen = data.readUInt32LE(offset);
           offset += 4;
           if (offset + encLen > totalLength) {
@@ -275,18 +271,16 @@ const DashboardScreen = () => {
             .toString('utf-8');
           offset += encLen;
 
-          // 🕒 created_at
           const createdAt = Number(data.readBigInt64LE(offset));
           offset += 8;
 
-          // 🧾 access_list
           let accessListLen = 0;
           const accessListStart = offset;
           try {
             accessListLen = data.readUInt32LE(offset);
             offset += 4;
 
-            const expectedAccessSize = accessListLen * (32 + 8); // Pubkey + i64
+            const expectedAccessSize = accessListLen * (32 + 8);
             if (offset + expectedAccessSize > totalLength) {
               console.warn('⚠️ Skipping corrupt access list');
               offset = accessListStart + 4;
@@ -300,16 +294,13 @@ const DashboardScreen = () => {
             accessListLen = 0;
           }
 
-          // 🧪 mime_type
           const mimeLen = data.readUInt32LE(offset);
           offset += 4;
           offset += mimeLen;
 
-          // 📦 file_size
           const fileSize = Number(data.readBigUInt64LE(offset));
           offset += 8;
 
-          // 📄 description
           const descLen = data.readUInt32LE(offset);
           offset += 4;
           if (offset + descLen > totalLength) {
@@ -320,7 +311,6 @@ const DashboardScreen = () => {
             .toString('utf-8');
           offset += descLen;
 
-          // 🏷 title
           const titleLen = data.readUInt32LE(offset);
           offset += 4;
           if (offset + titleLen > totalLength) {
@@ -368,7 +358,7 @@ const DashboardScreen = () => {
   const {authorizeSession} = useAuthorization();
 
   const registerOrganizationTransaction = useCallback(
-    async (name: string, contactInfo: string) => {
+    async (name: string, description: string, contactInfo: string) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -390,6 +380,7 @@ const DashboardScreen = () => {
           const data = Buffer.concat([
             discriminator,
             encodeAnchorString(name),
+            encodeAnchorString(description),
             encodeAnchorString(contactInfo),
           ]);
           const keys = [
@@ -456,7 +447,7 @@ const DashboardScreen = () => {
   const onClickRegisterOrg = async () => {
     try {
       setRegisterOrganizationLoading(true);
-      await registerOrganizationTransaction(name, contactInfo);
+      await registerOrganizationTransaction(name, description, contactInfo);
       await fetchOrganization();
     } catch (err: any) {
     } finally {
@@ -465,13 +456,6 @@ const DashboardScreen = () => {
   };
 
   const handleDeleteRecord = async (recordId: string, title: string) => {
-    // Simple confirmation using Alert (you can replace with a custom modal)
-    // const confirmed = confirm(
-    //   `Are you sure you want to delete "${title}"? This action cannot be undone.`,
-    // );
-
-    // if (!confirmed) return;
-
     try {
       setDeleteLoading(recordId);
       await deleteRecordTransaction(recordId);
@@ -479,6 +463,38 @@ const DashboardScreen = () => {
       console.error('Delete failed:', error);
     } finally {
       setDeleteLoading(null);
+    }
+  };
+
+  const confirmTransactionWithPolling = async (
+    txid,
+    commitment = 'confirmed',
+    timeout = 30000,
+  ) => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      try {
+        const status = await connection.getSignatureStatus(txid);
+
+        if (
+          status?.value?.confirmationStatus === commitment ||
+          status?.value?.confirmationStatus === 'finalized'
+        ) {
+          return status.value;
+        }
+
+        if (status?.value?.err) {
+          throw new Error(
+            `Transaction failed: ${JSON.stringify(status.value.err)}`,
+          );
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.log('Polling error:', error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
   };
 
@@ -554,31 +570,13 @@ const DashboardScreen = () => {
             },
           );
 
-          const confirmation = await connection.confirmTransaction(
-            {
-              signature: txid,
-              ...latestBlockhash,
-            },
-            'confirmed',
-          );
-
-          if (confirmation.value.err) {
-            throw new Error(
-              `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
-            );
-          }
+          await confirmTransactionWithPolling(txid, 'confirmed');
 
           toast.show({
             type: 'success',
             message: 'Record deleted successfully!',
           });
 
-          console.log(
-            'Health record uploaded successfully:',
-            txid,
-            signedTxs[0],
-          );
-          // Refresh the records list
           await fetchRecords();
 
           return signedTxs[0];

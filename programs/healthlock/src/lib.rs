@@ -7,7 +7,7 @@ pub mod instructions;
 use instructions::*;
 use state::*;
 
-declare_id!("3PmCmPDgjUNvX9vEJDuZgaeGxuRydFVtEQcHRqsWkSA7");
+declare_id!("5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX");
 
 pub const ANCHOR_DESCRIMINATOR_SIZE: usize = 8;
 
@@ -26,9 +26,10 @@ pub mod healthlock {
     pub fn register_organization(
         ctx: Context<RegisterOrganization>,
         name: String,
+        description: String,
         contact_info: String,
     ) -> Result<()> {
-        instructions::register_organization(ctx, name, contact_info)
+        instructions::register_organization(ctx, name, description, contact_info)
     }
 
     pub fn upload_health_record(

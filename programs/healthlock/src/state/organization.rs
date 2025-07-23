@@ -17,4 +17,9 @@ pub struct Organization {
     #[max_len(200)]
     pub contact_info: String,
     pub created_at: i64,
+    #[max_len(200)]
+    pub description: String,
+    #[max_len(100)]
+    pub record_ids: Vec<u64>
 }
+
