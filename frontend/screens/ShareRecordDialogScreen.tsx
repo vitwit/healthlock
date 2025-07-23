@@ -430,7 +430,7 @@ const ShareRecordDialogScreen = () => {
   };
 
   const shareRecordTransaction = useCallback(
-    async (recordId: string, organization: PublicKey) => {
+    async (recordId: string, selectedOrganizations: OrgType[]) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -439,14 +439,12 @@ const ShareRecordDialogScreen = () => {
           ]);
 
           const userPubkey = authorizationResult.publicKey;
-
           const [organizationPDA] = await PublicKey.findProgramAddress(
             [Buffer.from('organization'), userPubkey.toBuffer()],
             PROGRAM_ID,
           );
 
           const numericRecordId = parseInt(recordId.replace('REC', ''));
-
           const recordIdBuffer = Buffer.alloc(8);
           recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
 
@@ -463,30 +461,32 @@ const ShareRecordDialogScreen = () => {
             sha256.digest('global:grant_access'),
           ).slice(0, 8);
 
-          const instructionData = Buffer.concat([
-            discriminator,
-            recordIdBuffer,
-            organization.toBuffer(),
-          ]);
-
-          const keys = [
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: organizationPDA, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
-          ];
-
-          const instruction = new TransactionInstruction({
-            keys,
-            programId: PROGRAM_ID,
-            data: instructionData,
-          });
-
           const transaction = new Transaction({
             ...latestBlockhash,
             feePayer: userPubkey,
           });
 
-          transaction.add(instruction);
+          for (const organization of selectedOrganizations) {
+            const instructionData = Buffer.concat([
+              discriminator,
+              recordIdBuffer,
+              organization.publicKey.toBuffer(),
+            ]);
+
+            const keys = [
+              {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+              {pubkey: organizationPDA, isSigner: false, isWritable: true},
+              {pubkey: userPubkey, isSigner: true, isWritable: true},
+            ];
+
+            const instruction = new TransactionInstruction({
+              keys,
+              programId: PROGRAM_ID,
+              data: instructionData,
+            });
+
+            transaction.add(instruction);
+          }
 
           const signedTxs = await wallet.signTransactions({
             transactions: [transaction],
@@ -504,11 +504,10 @@ const ShareRecordDialogScreen = () => {
 
           toast.show({
             type: 'success',
-            message: 'Record deleted successfully!',
+            message: `Record shared with ${selectedOrganizations.length} organization(s) successfully!`,
           });
 
           await fetchRecords();
-
           return signedTxs[0];
         } catch (error: any) {
           console.error(
@@ -534,7 +533,6 @@ const ShareRecordDialogScreen = () => {
     },
     [authorizeSession, connection, toast],
   );
-
   const handleShare = async () => {
     const recordId = currentParams?.record?.id;
     const selectedOrgList = organizations.filter(org => selectedOrgs[org.id]);
@@ -545,10 +543,8 @@ const ShareRecordDialogScreen = () => {
 
     try {
       setShareLoading(recordId);
-      // for (const org of selectedOrgList) {
-      const org = selectedOrgList[0];
-      await shareRecordTransaction(recordId, org.publicKey);
-      // }
+      await shareRecordTransaction(recordId, selectedOrgList);
+
       goBack();
     } catch (error) {
       console.log('Sharing failed:', error);
