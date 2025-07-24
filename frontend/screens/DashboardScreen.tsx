@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,17 @@ import {
   FlatList,
   TextInput,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {useNavigation} from '../components/providers/NavigationProvider';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {useConnection} from '../components/providers/ConnectionProvider';
-import {PublicKey} from '@solana/web3.js';
-import {sha256} from 'js-sha256';
-import {ERR_UNKNOWN, PROGRAM_ID, TEE_STATE} from '../util/constants';
-import RecordCard, {RecordType} from '../components/RecordCard';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { PublicKey } from '@solana/web3.js';
+import { sha256 } from 'js-sha256';
+import { ERR_UNKNOWN, PROGRAM_ID, TEE_STATE } from '../util/constants';
+import RecordCard, { RecordType } from '../components/RecordCard';
 import bs58 from 'bs58';
 import {
   Transaction,
@@ -28,10 +29,10 @@ import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import {getOrganization, Organization} from '../api/organization';
-import {useToast} from '../components/providers/ToastContext';
-import {parseTEEState} from '../api/state';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
+import { getOrganization, Organization } from '../api/organization';
+import { useToast } from '../components/providers/ToastContext';
+import { parseTEEState } from '../api/state';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
 
 export function encodeAnchorString(str: string): Buffer {
   const strBuf = Buffer.from(str, 'utf8');
@@ -41,10 +42,8 @@ export function encodeAnchorString(str: string): Buffer {
 }
 
 const DashboardScreen = () => {
-  const {selectedAccount} = useAuthorization();
-  const {selectedRole} = useNavigation();
-
-  console.log("account -----", selectedAccount?.publicKey.toBase58());
+  const { selectedAccount } = useAuthorization();
+  const { selectedRole } = useNavigation();
 
   const isUser = selectedRole === 'user';
   const isOrg = selectedRole === 'organization';
@@ -53,18 +52,16 @@ const DashboardScreen = () => {
   const [description, setDescription] = useState('');
   const [contactInfo, setContactInfo] = useState('');
 
-  const {navigate, goBack} = useNavigation();
-  const {connection} = useConnection();
-  const {accounts} = useAuthorization();
+  const { navigate, goBack } = useNavigation();
+  const { connection } = useConnection();
 
   const [publicKey, setPublicKey] = useState<PublicKey>();
   useEffect(() => {
-    if (accounts && accounts?.length > 0) {
-      const p = accounts[0].publicKey;
-      setPublicKey(p);
+    if (selectedAccount) {
       setPublicKey(selectedAccount?.publicKey);
+      if (!teeState) { fetchTEEState() }
     }
-  }, [accounts]);
+  }, [selectedAccount]);
 
   const toast = useToast();
 
@@ -76,16 +73,18 @@ const DashboardScreen = () => {
     return teeStatePDA;
   };
 
-  const {teeState, setTEEState} = useTEEContext();
+  const { teeState, setTEEState } = useTEEContext();
+  const [loading, setLoading] = useState<boolean>(false);
 
   const fetchTEEState = async () => {
     try {
+      setLoading(true);
       const globalStatePDA = getTEEStatePDA();
       const accountInfo = await connection.getAccountInfo(globalStatePDA);
       console.log(accountInfo);
 
       const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-        filters: [{dataSize: 1073}],
+        filters: [{ dataSize: 1073 }],
       });
 
       for (const account of accounts) {
@@ -111,15 +110,11 @@ const DashboardScreen = () => {
         });
       }
     } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (!teeState)
-      fetchTEEState()
-        .then(res => console.log('res =========>', res))
-        .catch(err => console.log('errr =======> ', err));
-  }, []);
+
 
   const [organizationLoading, setOrganizationLoading] =
     useState<boolean>(false);
@@ -143,7 +138,7 @@ const DashboardScreen = () => {
       if (error && error.message === 'Organization account not found') {
         setRegisteredOrganization(false);
       } else {
-        toast.show({type: 'error', message: error?.message || ERR_UNKNOWN});
+        toast.show({ type: 'error', message: error?.message || ERR_UNKNOWN });
       }
     } finally {
       setOrganizationLoading(false);
@@ -155,15 +150,17 @@ const DashboardScreen = () => {
     fetchOrganization();
   }, [isOrg, publicKey]);
 
-  const [records, setRecords] = useState<RecordType[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
 
   function getDiscriminator(name: string): Buffer {
     const hash = sha256.digest(`account:${name}`);
     return Buffer.from(hash).slice(0, 8);
   }
 
+  const [userRecordsLoading, setUserRecordsLoading] = useState<boolean>(false);
+  const [userRecords, setUserRecords] = useState<RecordType[]>([]);
   useEffect(() => {
+    if (isOrg) return;
+
     const fetchRecords = async () => {
       console.log('🔍 Fetching records...');
       if (!publicKey) {
@@ -171,7 +168,7 @@ const DashboardScreen = () => {
         return;
       }
 
-      setLoading(true);
+      setUserRecordsLoading(true);
 
       try {
         const discriminator = getDiscriminator('HealthRecord');
@@ -196,52 +193,6 @@ const DashboardScreen = () => {
         console.log('✅ Accounts found:', accounts.length);
 
         const parsedRecords: RecordType[] = [];
-
-        setRecords([
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '1',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '6',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '2',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '3',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '4',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '5',
-            title: 'CBP Report',
-          },
-        ]);
-
         for (const acc of accounts) {
           const data = acc.account.data;
           const totalLength = data.length;
@@ -345,19 +296,22 @@ const DashboardScreen = () => {
         }
 
         console.log('📃 Parsed records:', parsedRecords);
-        // setRecords(parsedRecords);
+        setUserRecords(parsedRecords);
       } catch (err) {
         console.error('Failed to fetch health records:', err);
       } finally {
         console.log('🔁 Done loading');
-        setLoading(false);
+        setUserRecordsLoading(false);
       }
     };
 
     fetchRecords();
   }, [publicKey]);
 
-  const {authorizeSession} = useAuthorization();
+  const [organizationRecordsLoading, setOrganizationRecordsLoading] = useState<boolean>(false);
+  const [organizationRecords, setOrganizationRecords] = useState<RecordType[]>([]);
+
+  const { authorizeSession } = useAuthorization();
 
   const registerOrganizationTransaction = useCallback(
     async (name: string, contactInfo: string) => {
@@ -385,8 +339,8 @@ const DashboardScreen = () => {
             encodeAnchorString(contactInfo),
           ]);
           const keys = [
-            {pubkey: organizationPDA, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: organizationPDA, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -407,7 +361,7 @@ const DashboardScreen = () => {
 
           tx.add(ix);
 
-          const signedTxs = await wallet.signTransactions({transactions: [tx]});
+          const signedTxs = await wallet.signTransactions({ transactions: [tx] });
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
           );
@@ -456,129 +410,157 @@ const DashboardScreen = () => {
     }
   };
 
-  const renderItem = ({item}: {item: RecordType}) => (
+  const renderItem = ({ item }: { item: RecordType }) => (
     <RecordCard record={item} navigate={navigate} />
   );
+
+  const StatCard = ({
+    title,
+    value,
+    icon,
+  }: {
+    title: string;
+    value: number;
+    icon: string;
+  }) => (
+    <View style={styles.statCard}>
+      <Icon name={icon} size={30} color="#fff" />
+      <Text style={styles.statTitle}>{title}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+    </View>
+  );
+
 
   return (
     <LinearGradient
       colors={['#001F3F', '#003366', '#001F3F']}
       style={styles.container}>
-      <View style={styles.wrapper}>
-        <Text style={styles.heading}>
-          {isUser ? 'Your Records' : 'Organization Dashboard'}
-        </Text>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          {isUser ? (
-            <>
-              <StatCard title="Total Records" value={10} icon="folder" />
-              <StatCard title="Shared with Orgs" value={10} icon="share" />
-            </>
-          ) : (
-            <>
-              {registeredOrganization ? (
-                <>
-                  <StatCard
-                    title="Records Accessed"
-                    value={5}
-                    icon="visibility"
-                  />
-                </>
-              ) : (
-                <View style={styles.registrationForm}>
-                  <Text style={styles.formHeading}>
-                    Your organization is not registered. Please create an
-                    account to continue using the application.
-                  </Text>
-
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Name"
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    maxLength={50}
-                    value={name}
-                    onChangeText={setName}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Description"
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    maxLength={100}
-                    value={description}
-                    onChangeText={setDescription}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    multiline={true}
-                    numberOfLines={3}
-                    placeholder="Contact Info"
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    maxLength={255}
-                    value={contactInfo}
-                    onChangeText={setContactInfo}
-                  />
-
-                  <TouchableOpacity
-                    style={styles.registerButton}
-                    onPress={() => {
-                      onClickRegisterOrg();
-                    }}>
-                    <Text style={styles.registerButtonText}>Register</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </>
-          )}
+      {loading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color="#ffffff" />
         </View>
+      ) : (
+        <View style={styles.wrapper}>
+          <Text style={styles.heading}>
+            {isUser ? 'Your Records' : 'Organization Dashboard'}
+          </Text>
 
-        {/* Action Button */}
-        {isUser && (
-          <TouchableOpacity
-            style={styles.uploadButton}
-            onPress={() => {
-              navigate('Upload');
-            }}>
-            <Icon name="cloud-upload" size={20} color="#fff" />
-            <Text style={styles.uploadButtonText}>Upload New Record</Text>
-          </TouchableOpacity>
-        )}
+          {/* Stats Cards */}
+          <View style={styles.statsContainer}>
+            {isUser ? (
+              <>
+                <StatCard title="Total Records" value={10} icon="folder" />
+                <StatCard title="Shared with Orgs" value={10} icon="share" />
+              </>
+            ) : registeredOrganization ? (
+              <StatCard title="Records Accessed" value={5} icon="visibility" />
+            ) : (
+              <View style={styles.registrationForm}>
+                <Text style={styles.formHeading}>
+                  Your organization is not registered. Please create an account to continue using the application.
+                </Text>
 
-        {/* Record List */}
-        {(isUser || (registeredOrganization && isOrg)) && (
-          <ScrollView>
-            <View style={styles.listContainer}>
-              <Text style={styles.sectionHeading}>Records</Text>
-              <FlatList
-                contentContainerStyle={styles.listContainer}
-                data={records}
-                keyExtractor={item => item.id}
-                renderItem={renderItem}
-              />
-            </View>
-          </ScrollView>
-        )}
-      </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Name"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  maxLength={50}
+                  value={name}
+                  onChangeText={setName}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Description"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  maxLength={100}
+                  value={description}
+                  onChangeText={setDescription}
+                />
+                <TextInput
+                  style={styles.input}
+                  multiline
+                  numberOfLines={3}
+                  placeholder="Contact Info"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  maxLength={255}
+                  value={contactInfo}
+                  onChangeText={setContactInfo}
+                />
+
+                <TouchableOpacity
+                  style={styles.registerButton}
+                  onPress={onClickRegisterOrg}>
+                  <Text style={styles.registerButtonText}>Register</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Upload Button for Users */}
+          {isUser && (
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={() => navigate('Upload')}>
+              <Icon name="cloud-upload" size={20} color="#fff" />
+              <Text style={styles.uploadButtonText}>Upload New Record</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* User Record List */}
+          {
+            (isUser && userRecordsLoading) ?
+              (
+                <View style={styles.loading}>
+                  <ActivityIndicator size="large" color="#ffffff" />
+                </View>
+              ) :
+              <View style={styles.listContainer}>
+                <Text style={styles.sectionHeading}>Records</Text>
+                <FlatList
+                  contentContainerStyle={styles.listContainer}
+                  data={userRecords}
+                  keyExtractor={item => item.id}
+                  renderItem={renderItem}
+                  ListEmptyComponent={
+                    <>
+                      <Text style={styles.noRecords}>No Records found</Text>
+                    </>
+                  }
+                />
+              </View>
+          }
+          {/* User Record List */}
+          {
+            (isOrg && organizationRecordsLoading) ?
+              (
+                <View style={styles.loading}>
+                  <ActivityIndicator size="large" color="#ffffff" />
+                </View>
+              ) :
+              <View style={styles.listContainer}>
+                <Text style={styles.sectionHeading}>Records</Text>
+                <FlatList
+                  contentContainerStyle={styles.listContainer}
+                  data={[]}
+                  keyExtractor={item => item.id}
+                  renderItem={renderItem}
+                  ListEmptyComponent={
+                    <>
+                      <Text style={styles.noRecords}>No Records found</Text>
+                    </>
+                  }
+                />
+              </View>
+          }
+        </View>
+      )}
     </LinearGradient>
   );
+
 };
 
-const StatCard = ({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: number;
-  icon: string;
-}) => (
-  <View style={styles.statCard}>
-    <Icon name={icon} size={30} color="#fff" />
-    <Text style={styles.statTitle}>{title}</Text>
-    <Text style={styles.statValue}>{value}</Text>
-  </View>
-);
+
 
 const styles = StyleSheet.create({
   container: {
@@ -589,6 +571,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 50,
   },
+
+  loading: {
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   heading: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -684,6 +673,13 @@ const styles = StyleSheet.create({
     padding: 12,
     color: '#fff',
     marginBottom: 12,
+  },
+  noRecords: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 16,
+    textAlign: 'center'
   },
 });
 
