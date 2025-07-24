@@ -88,7 +88,7 @@ const UploadRecordScreen = () => {
   }
 
   const uploadToIPFS = async (enc: EncryptResult) => {
-    const url = 'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add';
+    const url = 'https://vv7mcklb-5001.inc1.devtunnels.ms/api/v0/add';
 
     const jsonData = enc;
     const path = `${RNFS.TemporaryDirectoryPath}/data.json`;

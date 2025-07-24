@@ -18,7 +18,7 @@ pub fn grant_access(
     );
 
     require!(
-        organization.key() == organization_key,
+        organization.owner.key() == organization_key,
         ErrorCode::InvalidOrganization
     );
 

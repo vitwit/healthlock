@@ -148,11 +148,11 @@ async function main() {
   const platformWallet = authority;
   const creator = authority;
 
-  // try {
-  //   await client.initializeRecordCounter(authority);
-  // } catch (err) {
-  //   console.error('❌ Setup failed:', err);
-  // }
+  try {
+    await client.initializeRecordCounter(authority);
+  } catch (err) {
+    console.error('❌ Setup failed:', err);
+  }
 
   // try {
   //   await client.registerOrganization("test-organization", "guddu", authority);

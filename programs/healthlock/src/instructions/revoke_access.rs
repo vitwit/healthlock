@@ -18,7 +18,7 @@ pub fn revoke_access(
     );
 
     require!(
-        organization.key() == organization,
+        organization_account.owner.key() == organization,
         ErrorCode::InvalidOrganization
     );
 

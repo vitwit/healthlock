@@ -85,9 +85,9 @@ const ShareRecordDialogScreen = () => {
 
         setOrganizations(transformedOrgs);
 
-        const initialSelection = {};
+        const initialSelection: Record<string, boolean> = {};
         transformedOrgs.forEach(org => {
-          initialSelection[org.organization_id] = false;
+          initialSelection[org.owner.toBase58()] = false;
         });
         setSelectedOrgs(initialSelection);
       } catch (error) {
@@ -104,7 +104,7 @@ const ShareRecordDialogScreen = () => {
     loadOrganizations();
   }, []);
 
-  const toggleOrg = (id: number) => {
+  const toggleOrg = (id: string) => {
     setSelectedOrgs(prev => ({...prev, [id]: !prev[id]}));
   };
 
@@ -156,6 +156,16 @@ const ShareRecordDialogScreen = () => {
       offset += 8;
     }
 
+    console.log('data of org.....', {
+      owner,
+      organization_id,
+      name,
+      contact_info,
+      created_at,
+      description,
+      record_ids,
+    });
+
     return {
       owner,
       organization_id,
@@ -185,12 +195,12 @@ const ShareRecordDialogScreen = () => {
       console.log(`Found ${accounts.length} organization accounts`);
 
       const organizations = accounts
-        .map(({pubkey, account}) => {
+        .map(({account}) => {
           try {
             const data = account.data.slice(8);
 
             const organization = deserializeOrganization(data);
-            organization.owner = pubkey;
+            // organization.owner = pubkey;
 
             return organization;
           } catch (error) {
@@ -217,7 +227,7 @@ const ShareRecordDialogScreen = () => {
     while (Date.now() - start < timeout) {
       try {
         const status = await connection.getSignatureStatus(txid);
-
+        console.log('polling...');
         if (
           status?.value?.confirmationStatus === commitment ||
           status?.value?.confirmationStatus === 'finalized'
@@ -454,14 +464,15 @@ const ShareRecordDialogScreen = () => {
           );
 
           // Find organization PDA todo
-          // const [organizationPDA] = await PublicKey.findProgramAddress(
-          //   [Buffer.from('organization'), organizationPublicKey.toBuffer()],
-          //   PROGRAM_ID,
-          // );
-
           const [organizationPDA] = await PublicKey.findProgramAddress(
-            [Buffer.from('organization'), userPubkey.toBuffer()],
+            [Buffer.from('organization'), organizationPublicKey.toBuffer()],
             PROGRAM_ID,
+          );
+
+          console.log(
+            'organization pubkey>>>>>>>>>>>>',
+            organizationPublicKey.toBase58(),
+            userPubkey.toBase58(),
           );
 
           // Create discriminator for revoke_access function
@@ -473,7 +484,7 @@ const ShareRecordDialogScreen = () => {
           const instructionData = Buffer.concat([
             discriminator,
             recordIdBuffer,
-            userPubkey.toBuffer(),
+            organizationPublicKey.toBuffer(),
           ]);
 
           // Define account keys
@@ -560,10 +571,6 @@ const ShareRecordDialogScreen = () => {
           ]);
 
           const userPubkey = authorizationResult.publicKey;
-          const [organizationPDA] = await PublicKey.findProgramAddress(
-            [Buffer.from('organization'), userPubkey.toBuffer()],
-            PROGRAM_ID,
-          );
 
           const numericRecordId = recordId;
           const recordIdBuffer = Buffer.alloc(8);
@@ -588,12 +595,21 @@ const ShareRecordDialogScreen = () => {
           });
 
           for (const organization of selectedOrganizations) {
+            const [organizationPDA] = await PublicKey.findProgramAddress(
+              [Buffer.from('organization'), organization.owner.toBuffer()],
+              PROGRAM_ID,
+            );
             const instructionData = Buffer.concat([
               discriminator,
               recordIdBuffer,
-              userPubkey.toBuffer(),
+              organization.owner.toBuffer(),
             ]);
 
+            console.log(
+              'granting.....',
+              organization.owner.toBase58(),
+              userPubkey.toBase58(),
+            );
             const keys = [
               {pubkey: healthRecordPda, isSigner: false, isWritable: true},
               {pubkey: organizationPDA, isSigner: false, isWritable: true},
@@ -655,10 +671,7 @@ const ShareRecordDialogScreen = () => {
     [authorizeSession, connection, toast],
   );
 
-  const handleRevokeAccess = async (
-    orgId: number,
-    organizationPublicKey: PublicKey,
-  ) => {
+  const handleRevokeAccess = async (organizationPublicKey: PublicKey) => {
     try {
       const recordId = currentParams?.record?.id;
 
@@ -677,7 +690,7 @@ const ShareRecordDialogScreen = () => {
       // Optionally update local state to remove the organization from selected orgs
       setSelectedOrgs(prev => {
         const updated = {...prev};
-        delete updated[orgId];
+        delete updated[organizationPublicKey.toBase58()];
         return updated;
       });
 
@@ -696,7 +709,7 @@ const ShareRecordDialogScreen = () => {
   const handleShare = async () => {
     const recordId = currentParams?.record?.id;
     const selectedOrgList = organizations.filter(
-      org => selectedOrgs[org.organization_id],
+      org => selectedOrgs[org.owner.toBase58()],
     );
     console.log(
       'Sharing with:',
@@ -707,7 +720,7 @@ const ShareRecordDialogScreen = () => {
       setShareLoading(recordId);
       await shareRecordTransaction(recordId, selectedOrgList);
 
-      const newOrgIds = selectedOrgList.map(org => org.organization_id);
+      const newOrgIds = selectedOrgList.map(org => org.owner.toBase58());
       setOrganizationsWithAccess(prev => {
         const combined = [...prev, ...newOrgIds];
         return [...new Set(combined)]; // Remove duplicates
@@ -739,14 +752,14 @@ const ShareRecordDialogScreen = () => {
         </View>
 
         <ScrollView contentContainerStyle={styles.orgList}>
-          {organizations.map(org => (
-            <View key={org.organization_id} style={styles.orgRow}>
+          {organizations.map((org, index) => (
+            <View key={org.owner.toBase58() ?? index} style={styles.orgRow}>
               <TouchableOpacity
                 style={styles.orgInfo}
-                onPress={() => toggleOrg(org.organization_id)}>
+                onPress={() => toggleOrg(org.owner.toBase58())}>
                 <Icon
                   name={
-                    selectedOrgs[org.organization_id]
+                    selectedOrgs[org.owner.toBase58()]
                       ? 'check-box'
                       : 'check-box-outline-blank'
                   }
@@ -762,9 +775,7 @@ const ShareRecordDialogScreen = () => {
               {org.record_ids?.includes(currentParams?.record?.id) && (
                 <TouchableOpacity
                   style={styles.revokeButton}
-                  onPress={() =>
-                    handleRevokeAccess(org.organization_id, org.owner)
-                  }>
+                  onPress={() => handleRevokeAccess(org.owner)}>
                   <Icon name="remove-circle-outline" size={20} color="red" />
                   <Text style={styles.revokeButtonText}>Revoke</Text>
                 </TouchableOpacity>
