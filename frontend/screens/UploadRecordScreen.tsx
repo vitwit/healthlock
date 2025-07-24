@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,8 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DocumentPicker from 'react-native-document-picker';
-import {useNavigation} from '../components/providers/NavigationProvider';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
 import {
   transact,
   Web3MobileWallet,
@@ -29,13 +29,14 @@ import {
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
-import {ERR_UNKNOWN, PROGRAM_ID} from '../util/constants';
-import {useConnection} from '../components/providers/ConnectionProvider';
-import {encodeAnchorString} from './DashboardScreen';
-import {useToast} from '../components/providers/ToastContext';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {sha256} from '@noble/hashes/sha256';
+import { ERR_UNKNOWN, PROGRAM_ID } from '../util/constants';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { encodeAnchorString } from './DashboardScreen';
+import { useToast } from '../components/providers/ToastContext';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { sha256 } from '@noble/hashes/sha256';
 import RNFS from 'react-native-fs';
+import { uploadJsonToPinata } from '../util/ipfs';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   // Decode the PEM wrapper
@@ -62,16 +63,16 @@ type EncryptResult = {
   nonce: string;
 };
 
-const {Encryptor} = NativeModules;
+const { Encryptor } = NativeModules;
 const UploadRecordScreen = () => {
-  const {connection} = useConnection();
-  const {navigate, goBack} = useNavigation();
+  const { connection } = useConnection();
+  const { navigate, goBack } = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<any>(null);
 
-  const {teeState} = useTEEContext();
+  const { teeState } = useTEEContext();
 
   const handleBackPress = () => {
     goBack();
@@ -133,10 +134,12 @@ const UploadRecordScreen = () => {
         selectedFile?.uri,
         base64DerKey,
       );
-      const cid = await uploadToIPFS(enc);
-      await uploadHealthRecordTransaction(cid, 'pdf', 5);
+      const cid = await uploadJsonToPinata(enc)
+      await uploadHealthRecordTransaction(cid, selectedFile?.type, JSON.stringify(enc).length);
     } catch (e: any) {
       console.error('=========================', e);
+    } finally {
+      setUploadHealthRecordLoading(false);
     }
   };
 
@@ -156,7 +159,7 @@ const UploadRecordScreen = () => {
 
       const recordId = Number(view.getBigUint64(offset, true));
 
-      return {recordId};
+      return { recordId };
     } catch (error) {
       console.error('Error parsing record counter data:', error);
       return null;
@@ -199,7 +202,7 @@ const UploadRecordScreen = () => {
   };
 
   const toast = useToast();
-  const {authorizeSession} = useAuthorization();
+  const { authorizeSession } = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
     async (enc: string, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
@@ -323,10 +326,10 @@ const UploadRecordScreen = () => {
 
           // Create instruction accounts matching your UploadHealthRecord struct order
           const keys = [
-            {pubkey: userVaultPda, isSigner: false, isWritable: true},
-            {pubkey: recordCounterPda, isSigner: false, isWritable: true},
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: userVaultPda, isSigner: false, isWritable: true },
+            { pubkey: recordCounterPda, isSigner: false, isWritable: true },
+            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -432,6 +435,8 @@ const UploadRecordScreen = () => {
           });
 
           throw error;
+        } finally {
+
         }
       });
     },
@@ -463,7 +468,7 @@ const UploadRecordScreen = () => {
       <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{flex: 1}}>
+          style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled">
@@ -515,11 +520,19 @@ const UploadRecordScreen = () => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={handleUpload}>
+                style={[
+                  styles.uploadButton,
+                  uploadHealthRecordLoading && styles.disabledButton, // optional style for disabled state
+                ]}
+                onPress={handleUpload}
+                disabled={uploadHealthRecordLoading} // disables touch interaction
+              >
                 <Icon name="cloud-upload" size={20} color="#fff" />
-                <Text style={styles.uploadButtonText}>Upload & Encrypt</Text>
+                <Text style={styles.uploadButtonText}>
+                  {uploadHealthRecordLoading ? 'Please wait...' : 'Upload & Encrypt'}
+                </Text>
               </TouchableOpacity>
+
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -597,6 +610,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
+  },
+  disabledButton: {
+    backgroundColor: '#999',
   },
   uploadButton: {
     flexDirection: 'row',

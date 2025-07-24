@@ -1,11 +1,11 @@
-import {Share, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import { Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
 import FileViewer from 'react-native-file-viewer';
-import {Alert} from 'react-native';
+import { Alert } from 'react-native';
 import bs58 from 'bs58';
-import {useAuthorization} from './providers/AuthorizationProvider';
-import {useSolanaMessageSigner} from '../hooks/useSignMessage';
+import { useAuthorization } from './providers/AuthorizationProvider';
+import { useSolanaMessageSigner } from '../hooks/useSignMessage';
 
 export type RecordType = {
   id: number;
@@ -26,15 +26,15 @@ const RecordCard = ({
   onDelete: (recordId: string, title: string) => void;
 }) => {
   const formattedDate = new Date(record.createdAt * 1000).toLocaleDateString();
-  const {signMessage} = useSolanaMessageSigner();
-  const {selectedAccount} = useAuthorization();
+  const { signMessage } = useSolanaMessageSigner();
+  const { selectedAccount } = useAuthorization();
 
   const onViewRecord = async (record: RecordType) => {
     try {
       console.log('🚀 Starting record download process...');
 
       const recordOwner = selectedAccount?.publicKey?.toBase58();
-      const recordID = parseInt(record.id.replace('REC', ''));
+      const recordID = record.id;
 
       if (!recordOwner) {
         throw new Error('Missing record owner public key');
@@ -92,11 +92,11 @@ const RecordCard = ({
       ) => {
         // Use server detection first if available
         if (serverType && serverType !== 'unknown') {
-          const typeMap: {[key: string]: {type: string; mimeType: string}} = {
-            pdf: {type: 'pdf', mimeType: 'application/pdf'},
-            jpeg: {type: 'jpg', mimeType: 'image/jpeg'},
-            png: {type: 'png', mimeType: 'image/png'},
-            gif: {type: 'gif', mimeType: 'image/gif'},
+          const typeMap: { [key: string]: { type: string; mimeType: string } } = {
+            pdf: { type: 'pdf', mimeType: 'application/pdf' },
+            jpeg: { type: 'jpg', mimeType: 'image/jpeg' },
+            png: { type: 'png', mimeType: 'image/png' },
+            gif: { type: 'gif', mimeType: 'image/gif' },
           };
 
           if (typeMap[serverType]) {
@@ -119,12 +119,12 @@ const RecordCard = ({
               bytes[2] === 0x44 &&
               bytes[3] === 0x46
             ) {
-              return {type: 'pdf', mimeType: 'application/pdf'};
+              return { type: 'pdf', mimeType: 'application/pdf' };
             }
 
             // JPEG signatures: FF D8 FF
             if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-              return {type: 'jpg', mimeType: 'image/jpeg'};
+              return { type: 'jpg', mimeType: 'image/jpeg' };
             }
 
             // PNG signature: 89 50 4E 47 0D 0A 1A 0A
@@ -134,12 +134,12 @@ const RecordCard = ({
               bytes[2] === 0x4e &&
               bytes[3] === 0x47
             ) {
-              return {type: 'png', mimeType: 'image/png'};
+              return { type: 'png', mimeType: 'image/png' };
             }
 
             // GIF signatures: GIF87a or GIF89a
             if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
-              return {type: 'gif', mimeType: 'image/gif'};
+              return { type: 'gif', mimeType: 'image/gif' };
             }
           } catch (e) {
             console.log('Could not detect file type from magic bytes');
@@ -158,18 +158,18 @@ const RecordCard = ({
           const ext = fileName.toLowerCase().split('.').pop();
           switch (ext) {
             case 'pdf':
-              return {type: 'pdf', mimeType: 'application/pdf'};
+              return { type: 'pdf', mimeType: 'application/pdf' };
             case 'jpg':
             case 'jpeg':
-              return {type: 'jpg', mimeType: 'image/jpeg'};
+              return { type: 'jpg', mimeType: 'image/jpeg' };
             case 'png':
-              return {type: 'png', mimeType: 'image/png'};
+              return { type: 'png', mimeType: 'image/png' };
             case 'gif':
-              return {type: 'gif', mimeType: 'image/gif'};
+              return { type: 'gif', mimeType: 'image/gif' };
             case 'txt':
-              return {type: 'txt', mimeType: 'text/plain'};
+              return { type: 'txt', mimeType: 'text/plain' };
             case 'doc':
-              return {type: 'doc', mimeType: 'application/msword'};
+              return { type: 'doc', mimeType: 'application/msword' };
             case 'docx':
               return {
                 type: 'docx',
@@ -182,7 +182,7 @@ const RecordCard = ({
         }
 
         // Default to PDF for medical records
-        return {type: 'pdf', mimeType: 'application/pdf'};
+        return { type: 'pdf', mimeType: 'application/pdf' };
       };
 
       let fileInfo = detectFileTypeAndExtension(
@@ -255,7 +255,7 @@ const RecordCard = ({
       }
 
       Alert.alert('Error viewing record', errorMessage, [
-        {text: 'OK'},
+        { text: 'OK' },
         {
           text: 'Retry',
           onPress: () => onViewRecord(record),
@@ -290,7 +290,7 @@ const RecordCard = ({
 
         <TouchableOpacity
           style={styles.button}
-          onPress={() => navigate('ShareRecord', {record})}>
+          onPress={() => navigate('ShareRecord', { record })}>
           <Icon name="share" size={16} color="#fff" />
           <Text style={styles.buttonText}>Share</Text>
         </TouchableOpacity>
@@ -301,7 +301,7 @@ const RecordCard = ({
             onDelete(record.id, record.title);
           }}>
           <Icon name="delete" size={16} color="red" />
-          <Text style={[styles.buttonText, {color: 'red'}]}>Delete</Text>
+          <Text style={[styles.buttonText, { color: 'red' }]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },

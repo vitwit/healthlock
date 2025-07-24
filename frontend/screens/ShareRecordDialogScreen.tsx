@@ -87,7 +87,7 @@ const ShareRecordDialogScreen = () => {
 
         const initialSelection = {};
         transformedOrgs.forEach(org => {
-          initialSelection[org.id] = false;
+          initialSelection[org.organization_id] = false;
         });
         setSelectedOrgs(initialSelection);
       } catch (error) {
@@ -724,7 +724,7 @@ const ShareRecordDialogScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#667EEA', '#764BA2']} style={styles.gradient}>
+      <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
         {/* Header */}
         <View style={styles.topBar}>
           <TouchableOpacity onPress={goBack} style={styles.backButton}>
