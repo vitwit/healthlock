@@ -10,17 +10,13 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '../components/providers/NavigationProvider';
-import {PublicKey, SystemProgram} from '@solana/web3.js';
-import {TEE_STATE} from '../util/constants';
+import {PublicKey} from '@solana/web3.js';
+import {PROGRAM_ID, TEE_STATE} from '../util/constants';
 import {useConnection} from './../components/providers/ConnectionProvider';
 import {parseTEEState} from '../api/state';
 
 export default function HomeScreen() {
   const {navigate, selectedRole} = useNavigation();
-
-  const PROGRAM_ID = new PublicKey(
-    '5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX',
-  );
 
   useEffect(() => {
     console.log(selectedRole);

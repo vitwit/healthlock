@@ -16,7 +16,6 @@ export class HealthLockClient {
   public provider: anchor.Provider;
   public creatorTokenAccount: anchor.web3.PublicKey;
 
-  // Seeds
   private readonly ORGANIZATION_SEED = 'organization';
   private readonly TEE_SEED = 'state';
   private readonly HEALTH_RECORD_SEED = 'health_record';

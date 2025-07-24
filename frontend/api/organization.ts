@@ -8,15 +8,16 @@ const ORGANIZATION_DISCRIMINATOR = Buffer.from([
     145, 38, 152, 251, 91, 57, 118, 160
 ]);
 
-export type Organization = {
+interface Organization {
     pubkey: string;
-    owner: string
+    owner: string;
     organizationId: string;
     name: string;
     contactInfo: string;
+    description: string;
+    recordIds: string[]; // use string to handle big numbers safely
     createdAt: number;
 }
-
 function decodeAnchorString(buffer: Buffer, offset: number): { value: string, nextOffset: number } {
     const len = buffer.readUInt32LE(offset);
     const start = offset + 4;
@@ -25,20 +26,22 @@ function decodeAnchorString(buffer: Buffer, offset: number): { value: string, ne
     return { value, nextOffset: end };
 }
 
-export async function getOrganization(connection: Connection, owner: PublicKey): Promise<Organization> {
+
+export async function getOrganization(
+    connection: Connection,
+    owner: PublicKey
+): Promise<Organization> {
     const [organizationPDA] = await PublicKey.findProgramAddress(
         [Buffer.from('organization'), owner.toBuffer()],
         PROGRAM_ID
     );
 
     const accountInfo = await connection.getAccountInfo(organizationPDA);
-    if (!accountInfo) {
-        throw new Error('Organization account not found');
-    }
+    if (!accountInfo) throw new Error('Organization account not found');
 
     const data = accountInfo.data;
 
-    // Check discriminator
+    // Validate discriminator
     const discriminator = data.slice(0, 8);
     if (!discriminator.equals(ORGANIZATION_DISCRIMINATOR)) {
         throw new Error('Invalid account discriminator — not an Organization');
@@ -46,7 +49,7 @@ export async function getOrganization(connection: Connection, owner: PublicKey):
 
     let offset = 8;
 
-    // owner: pubkey (32 bytes)
+    // owner: Pubkey (32 bytes)
     const accountOwner = new PublicKey(data.slice(offset, offset + 32));
     offset += 32;
 
@@ -64,6 +67,22 @@ export async function getOrganization(connection: Connection, owner: PublicKey):
 
     // created_at: i64 (8 bytes)
     const createdAt = Number(data.readBigInt64LE(offset));
+    offset += 8;
+
+    // description: string
+    const { value: description, nextOffset: afterDesc } = decodeAnchorString(data, offset);
+    offset = afterDesc;
+
+    // record_ids: Vec<u64>
+    const recordIdsLen = data.readUInt32LE(offset); // Anchor encodes Vec<T> with a u32 length prefix
+    offset += 4;
+
+    const recordIds: string[] = [];
+    for (let i = 0; i < recordIdsLen; i++) {
+        const recordId = data.readBigUInt64LE(offset);
+        recordIds.push(recordId.toString());
+        offset += 8;
+    }
 
     return {
         pubkey: organizationPDA.toBase58(),
@@ -71,6 +90,8 @@ export async function getOrganization(connection: Connection, owner: PublicKey):
         organizationId: organizationId.toString(),
         name,
         contactInfo,
+        description,
+        recordIds,
         createdAt,
     };
 }

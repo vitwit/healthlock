@@ -17,6 +17,7 @@ import RegisterOrganizationScreen from './screens/RegisterOrganizationScreen';
 import ShareRecordDialogScreen from './screens/ShareRecordDialogScreen';
 import {ToastProvider} from './components/providers/ToastContext';
 import {TEEStateProvider} from './components/providers/TEEStateProvider';
+import { SOLANA_VALIDATOR } from './util/constants';
 
 if (typeof global.TextEncoder === 'undefined') {
   global.TextEncoder = TextEncoder as any;
@@ -55,7 +56,7 @@ export default function App() {
   return (
     <ConnectionProvider
       config={{commitment: 'processed'}}
-      endpoint={'https://40v82shj-8899.inc1.devtunnels.ms/'}>
+      endpoint={SOLANA_VALIDATOR}>
       <AuthorizationProvider>
         <TEEStateProvider>
           <NavigationProvider>

@@ -1,4 +1,4 @@
-import {Share, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
 import FileViewer from 'react-native-file-viewer';
@@ -6,9 +6,10 @@ import {Alert} from 'react-native';
 import bs58 from 'bs58';
 import {useAuthorization} from './providers/AuthorizationProvider';
 import {useSolanaMessageSigner} from '../hooks/useSignMessage';
+import {REST_ENDPOINT} from '../util/constants';
 
 export type RecordType = {
-  id: string;
+  id: number;
   title: string;
   description: string;
   createdAt: number;
@@ -34,7 +35,7 @@ const RecordCard = ({
       console.log('🚀 Starting record download process...');
 
       const recordOwner = selectedAccount?.publicKey?.toBase58();
-      const recordID = parseInt(record.id.replace('REC', ''));
+      const recordID = record.id;
 
       if (!recordOwner) {
         throw new Error('Missing record owner public key');
@@ -50,20 +51,17 @@ const RecordCard = ({
       console.log('📤 Sending download request...');
 
       // Send request to backend with specific options for React Native
-      const response = await fetch(
-        'https://40v82shj-8085.inc1.devtunnels.ms/download-record',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            cid: record.encryptedData,
-            signer: recordOwner,
-            signature: signature,
-          }),
+      const response = await fetch(REST_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          cid: record.encryptedData,
+          signer: recordOwner,
+          signature: signature,
+        }),
+      });
 
       console.log('📥 Response status:', response.status);
 

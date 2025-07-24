@@ -5,7 +5,6 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  Dimensions,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -29,18 +28,15 @@ import {
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
-import {ERR_UNKNOWN, PROGRAM_ID} from '../util/constants';
+import {PROGRAM_ID} from '../util/constants';
 import {useConnection} from '../components/providers/ConnectionProvider';
-import {encodeAnchorString} from './DashboardScreen';
 import {useToast} from '../components/providers/ToastContext';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
 import {sha256} from '@noble/hashes/sha256';
-import RNFS from 'react-native-fs';
+import {uploadJsonToPinata} from '../util/ipfs';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
-  // Decode the PEM wrapper
   const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
-  // Extract only the Base64 part from the PEM
   return pemString
     .replace('-----BEGIN PUBLIC KEY-----', '')
     .replace('-----END PUBLIC KEY-----', '')
@@ -50,17 +46,6 @@ function extractBase64FromPemWrappedKey(base64Pem: string): string {
 interface RecordCounterData {
   recordId: number;
 }
-
-interface IPFSUploadResponse {
-  cid: string;
-  size: number;
-}
-
-type EncryptResult = {
-  encrypted_aes_key: string;
-  ciphertext: string;
-  nonce: string;
-};
 
 const {Encryptor} = NativeModules;
 const UploadRecordScreen = () => {
@@ -86,38 +71,6 @@ const UploadRecordScreen = () => {
     [key: string]: any;
   }
 
-  const uploadToIPFS = async (enc: EncryptResult) => {
-    const url = 'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add';
-
-    const jsonData = enc;
-    const path = `${RNFS.TemporaryDirectoryPath}/data.json`;
-
-    try {
-      // Write file to temp storage
-      await RNFS.writeFile(path, JSON.stringify(jsonData), 'utf8');
-
-      const formData = new FormData();
-      formData.append('file', {
-        uri: `file://${path}`,
-        name: 'data.json',
-        type: 'application/json',
-      });
-
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      console.log('Upload response:', result);
-      return result.Hash;
-    } catch (error) {
-      console.error('Error uploading to IPFS:', error);
-      throw error;
-    }
-  };
-
   const [uploadHealthRecordLoading, setUploadHealthRecordLoading] =
     useState<boolean>(false);
   const handleUpload = async () => {
@@ -133,20 +86,17 @@ const UploadRecordScreen = () => {
         selectedFile?.uri,
         base64DerKey,
       );
-      const cid = await uploadToIPFS(enc);
-      await uploadHealthRecordTransaction(cid, 'pdf', 5);
+      const cid = await uploadJsonToPinata(enc);
+      await uploadHealthRecordTransaction(
+        cid,
+        selectedFile?.type,
+        JSON.stringify(enc).length,
+      );
     } catch (e: any) {
       console.error('=========================', e);
+    } finally {
+      setUploadHealthRecordLoading(false);
     }
-  };
-
-  const RECORD_COUNTER_SEED = Buffer.from('record_counter');
-  const getRecordCounterPDA = (): PublicKey => {
-    const [recordCounterPDA] = PublicKey.findProgramAddressSync(
-      [RECORD_COUNTER_SEED],
-      PROGRAM_ID,
-    );
-    return recordCounterPDA;
   };
 
   const parseRecordCounter = (data: Buffer): RecordCounterData | null => {
@@ -173,7 +123,7 @@ const UploadRecordScreen = () => {
     while (Date.now() - start < timeout) {
       try {
         const status = await connection.getSignatureStatus(txid);
-
+        console.log('polling...');
         if (
           status?.value?.confirmationStatus === commitment ||
           status?.value?.confirmationStatus === 'finalized'
@@ -187,7 +137,6 @@ const UploadRecordScreen = () => {
           );
         }
 
-        // Wait 1 second before next poll
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.log('Polling error:', error);
@@ -221,7 +170,6 @@ const UploadRecordScreen = () => {
             PROGRAM_ID,
           );
 
-          // Get current record counter to determine the record ID that will be used
           const recordCounterAccount = await connection.getAccountInfo(
             recordCounterPda,
           );
@@ -243,10 +191,9 @@ const UploadRecordScreen = () => {
             recordIdBuffer.writeBigUInt64LE(BigInt(currentRecordId), 0);
           } catch (error) {
             console.log('writeBigUInt64LE failed, using fallback:', error);
-            // Fallback: write as two 32-bit integers (little endian)
             const id = Number(currentRecordId);
-            recordIdBuffer.writeUInt32LE(id & 0xffffffff, 0); // Low 32 bits
-            recordIdBuffer.writeUInt32LE((id >>> 32) & 0xffffffff, 4); // High 32 bits
+            recordIdBuffer.writeUInt32LE(id & 0xffffffff, 0);
+            recordIdBuffer.writeUInt32LE((id >>> 32) & 0xffffffff, 4);
           }
 
           const [healthRecordPda] = PublicKey.findProgramAddressSync(
@@ -258,13 +205,12 @@ const UploadRecordScreen = () => {
             PROGRAM_ID,
           );
 
-          const testEncryptedData = enc; // Very short encrypted data
-          const testMimeType = mimeType; // Simple MIME type
-          const testFileSize = fileSize; // Small file size
-          const testDescription = description; // Short description
-          const testTitle = title; // Very short title
+          const testEncryptedData = enc;
+          const testMimeType = mimeType;
+          const testFileSize = fileSize;
+          const testDescription = description;
+          const testTitle = title;
 
-          // Validate test data lengths (should all pass easily)
           if (testEncryptedData.length > 1048) {
             throw new Error('Encrypted data too large (max 1048 characters)');
           }
@@ -301,7 +247,6 @@ const UploadRecordScreen = () => {
           const titleLengthBuffer = Buffer.alloc(4);
           titleLengthBuffer.writeUInt32LE(titleBytes.length, 0);
 
-          // Combine all instruction data
           const instructionData = Buffer.concat([
             discriminator,
             encryptedDataLengthBuffer,
@@ -321,7 +266,6 @@ const UploadRecordScreen = () => {
             'bytes',
           );
 
-          // Create instruction accounts matching your UploadHealthRecord struct order
           const keys = [
             {pubkey: userVaultPda, isSigner: false, isWritable: true},
             {pubkey: recordCounterPda, isSigner: false, isWritable: true},
@@ -432,6 +376,7 @@ const UploadRecordScreen = () => {
           });
 
           throw error;
+        } finally {
         }
       });
     },
@@ -515,10 +460,18 @@ const UploadRecordScreen = () => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={handleUpload}>
+                style={[
+                  styles.uploadButton,
+                  uploadHealthRecordLoading && styles.disabledButton,
+                ]}
+                onPress={handleUpload}
+                disabled={uploadHealthRecordLoading}>
                 <Icon name="cloud-upload" size={20} color="#fff" />
-                <Text style={styles.uploadButtonText}>Upload & Encrypt</Text>
+                <Text style={styles.uploadButtonText}>
+                  {uploadHealthRecordLoading
+                    ? 'Please wait...'
+                    : 'Upload & Encrypt'}
+                </Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -597,6 +550,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
+  },
+  disabledButton: {
+    backgroundColor: '#999',
   },
   uploadButton: {
     flexDirection: 'row',

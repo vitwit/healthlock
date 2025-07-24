@@ -7,6 +7,8 @@ import {
   FlatList,
   TextInput,
   ScrollView,
+  ActivityIndicator,
+  RefreshControl, // Add this import
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
@@ -51,20 +53,29 @@ const DashboardScreen = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [contactInfo, setContactInfo] = useState('');
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
+  const [organizationLoading, setOrganizationLoading] =
+    useState<boolean>(false);
+  const [organization, setOrganization] = useState<Organization | undefined>(
+    undefined,
+  );
+  const [registeredOrganization, setRegisteredOrganization] =
+    useState<boolean>(false);
+  const [records, setRecords] = useState<RecordType[]>([]);
+  const [userRecordsCount, setUserRecordCount] = useState<number>(0);
+  const [sharedRecordsCount, setSharedRecordsCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [userRecordsLoading, setUserRecordsLoading] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false); // Add refresh state
 
   const {navigate, goBack} = useNavigation();
   const {connection} = useConnection();
-  const {accounts} = useAuthorization();
+  const [accessListLength, setaccessListLength] = useState<number>(0);
 
   const [publicKey, setPublicKey] = useState<PublicKey>();
   useEffect(() => {
-    if (accounts && accounts?.length > 0) {
-      const p = accounts[0].publicKey;
-      setPublicKey(p);
-      setPublicKey(selectedAccount?.publicKey);
-    }
-  }, [accounts]);
+    setPublicKey(selectedAccount?.publicKey);
+  }, [selectedAccount]);
 
   const toast = useToast();
 
@@ -102,14 +113,12 @@ const DashboardScreen = () => {
 
   const fetchTEEState = async () => {
     try {
-      const globalStatePDA = getTEEStatePDA();
-      const accountInfo = await connection.getAccountInfo(globalStatePDA);
-      console.log(accountInfo);
-
+      setLoading(true);
       const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
         filters: [{dataSize: 1073}],
       });
 
+      console.log('Parsed TEE Node:', accounts);
       for (const account of accounts) {
         const parsed = parseTEEState(account.account.data);
         console.log('Parsed TEE Node:', parsed);
@@ -133,6 +142,9 @@ const DashboardScreen = () => {
         });
       }
     } finally {
+      setTimeout(() => {
+        setLoading(false);
+      }, 2_000);
     }
   };
 
@@ -142,14 +154,6 @@ const DashboardScreen = () => {
         .then(res => console.log('res =========>', res))
         .catch(err => console.log('errr =======> ', err));
   }, []);
-
-  const [organizationLoading, setOrganizationLoading] =
-    useState<boolean>(false);
-  const [organization, setOrganization] = useState<Organization | undefined>(
-    undefined,
-  );
-  const [registeredOrganization, setRegisteredOrganization] =
-    useState<boolean>(false);
 
   const fetchOrganization = async () => {
     if (!publicKey) {
@@ -181,24 +185,197 @@ const DashboardScreen = () => {
     fetchOrganization();
   }, [isOrg, publicKey]);
 
-  const [records, setRecords] = useState<RecordType[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-
   function getDiscriminator(name: string): Buffer {
     const hash = sha256.digest(`account:${name}`);
     return Buffer.from(hash).slice(0, 8);
   }
 
-  const fetchRecords = async () => {
+  const fetchOrganizationRecords = async () => {
+    if (isUser) {
+      return;
+    }
+    let organizationData;
+    let accessRecords: string[] = [];
+
+    try {
+      // Fetch organization account
+      organizationData = await getOrganization(connection, publicKey);
+      accessRecords = organizationData.recordIds;
+      console.log('🏢 Fetched organization inline:', organizationData?.name);
+    } catch (error) {
+      console.log('👤 No organization found with ', publicKey.toBase58());
+      setRecords([]);
+      setLoading(false);
+      return;
+    }
+
+    const recordIdSet = new Set(accessRecords);
+
+    const discriminator = getDiscriminator('HealthRecord');
+    const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+      filters: [
+        {
+          memcmp: {
+            offset: 0,
+            bytes: bs58.encode(discriminator),
+          },
+        },
+      ],
+    });
+
+    console.log('✅ All health record accounts found:', accounts.length);
+
+    const parsedRecords: RecordType[] = [];
+
+    for (const acc of accounts) {
+      const data = acc.account.data;
+      const totalLength = data.length;
+      let offset = 8;
+
+      try {
+        console.log('📦 Record buffer length:', totalLength);
+
+        const owner = new PublicKey(data.slice(offset, offset + 32));
+        offset += 32;
+
+        const record_id = Number(data.readBigUInt64LE(offset));
+        offset += 8;
+
+        // Check if this record_id is listed in organization's recordIds
+        if (!recordIdSet.has(record_id.toString())) {
+          console.log('⛔ Not in organization.recordIds, skipping:', record_id);
+          continue;
+        }
+
+        // Check if the record is active in the owner's vault
+        const [userVaultPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('user_vault'), owner.toBuffer()],
+          PROGRAM_ID,
+        );
+
+        const userVaultAccount = await connection.getAccountInfo(userVaultPda);
+        if (!userVaultAccount) {
+          console.log('User vault not found for owner:', owner.toBase58());
+          continue;
+        }
+
+        const userVault = parseUserVault(userVaultAccount.data);
+        const activeRecordIds = userVault.record_ids;
+
+        if (!activeRecordIds.includes(record_id)) {
+          console.log('Record not active, skipping:', record_id);
+          continue;
+        }
+
+        const encLen = data.readUInt32LE(offset);
+        offset += 4;
+        if (offset + encLen > totalLength) {
+          throw new Error('Encrypted data exceeds buffer');
+        }
+
+        const encryptedData = data
+          .slice(offset, offset + encLen)
+          .toString('utf-8');
+        offset += encLen;
+
+        const createdAt = Number(data.readBigInt64LE(offset));
+        offset += 8;
+
+        // Skip access list parsing entirely
+        let accessListLen = 0;
+        const accessListStart = offset;
+        try {
+          accessListLen = data.readUInt32LE(offset);
+          offset += 4;
+
+          const expectedAccessSize = accessListLen * (32 + 8);
+          if (offset + expectedAccessSize > totalLength) {
+            console.warn('⚠️ Skipping corrupt access list');
+            offset = accessListStart + 4;
+            accessListLen = 0;
+          } else {
+            offset += expectedAccessSize;
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to read access list — skipping');
+          offset = accessListStart + 4;
+          accessListLen = 0;
+        }
+
+        const mimeLen = data.readUInt32LE(offset);
+        offset += 4;
+        offset += mimeLen;
+
+        const fileSize = Number(data.readBigUInt64LE(offset));
+        offset += 8;
+
+        const descLen = data.readUInt32LE(offset);
+        offset += 4;
+        if (offset + descLen > totalLength) {
+          throw new Error('Description exceeds buffer');
+        }
+        const description = data
+          .slice(offset, offset + descLen)
+          .toString('utf-8');
+        offset += descLen;
+
+        const titleLen = data.readUInt32LE(offset);
+        offset += 4;
+        if (offset + titleLen > totalLength) {
+          throw new Error('Title exceeds buffer');
+        }
+        const title = data.slice(offset, offset + titleLen).toString('utf-8');
+        offset += titleLen;
+
+        console.log('✅ Parsed Organization Record:', {
+          id: `REC${record_id}`,
+          title,
+          description,
+          owner: owner.toBase58(),
+          createdAt,
+          accessGrantedTo: accessListLen,
+        });
+
+        parsedRecords.push({
+          id: `REC${record_id}`,
+          title,
+          description,
+          encryptedData,
+          createdAt,
+          accessGrantedTo: accessListLen,
+          owner: owner.toBase58(),
+        });
+      } catch (err: any) {
+        console.error(
+          '❌ Failed to parse an organization record:',
+          err?.message,
+        );
+      }
+    }
+    console.log('📃 Parsed organization-owned records:', parsedRecords);
+    setaccessListLength(parsedRecords.length);
+    setRecords(parsedRecords);
+  };
+
+  useEffect(() => {
+    if (isOrg) {
+      fetchOrganizationRecords();
+    }
+  }, [publicKey, isOrg]);
+
+  const fetchUserRecords = async () => {
+    if (isOrg) {
+      return;
+    }
+
     console.log('🔍 Fetching records...');
     if (!publicKey) {
       console.log('inside');
       return;
     }
 
-    setLoading(true);
-
     try {
+      setUserRecordsLoading(true);
       const [userVaultPda] = PublicKey.findProgramAddressSync(
         [Buffer.from('user_vault'), publicKey.toBuffer()],
         PROGRAM_ID,
@@ -329,7 +506,7 @@ const DashboardScreen = () => {
           });
 
           parsedRecords.push({
-            id: `REC${record_id}`,
+            id: record_id,
             title,
             description,
             encryptedData,
@@ -343,17 +520,45 @@ const DashboardScreen = () => {
 
       console.log('📃 Parsed records:', parsedRecords);
       setRecords(parsedRecords);
+      setUserRecordCount(parsedRecords.length);
+
+      const total = parsedRecords.reduce(
+        (t, item) => t + item.accessGrantedTo,
+        0,
+      );
+      setSharedRecordsCount(total);
     } catch (err) {
       console.error('Failed to fetch health records:', err);
     } finally {
       console.log('🔁 Done loading');
-      setLoading(false);
+      setUserRecordsLoading(true);
     }
   };
 
   useEffect(() => {
-    fetchRecords();
-  }, [publicKey]);
+    if (isUser) {
+      fetchUserRecords();
+    }
+  }, [publicKey, isUser]);
+
+  // Add refresh function
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (isUser) {
+        await fetchUserRecords();
+      } else if (isOrg) {
+        await fetchOrganization();
+        if (registeredOrganization) {
+          await fetchOrganizationRecords();
+        }
+      }
+    } catch (error) {
+      console.error('Refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [isUser, isOrg, registeredOrganization]);
 
   const {authorizeSession} = useAuthorization();
 
@@ -411,7 +616,7 @@ const DashboardScreen = () => {
             signedTxs[0].serialize(),
           );
 
-          await connection.confirmTransaction(txid, 'confirmed');
+          await confirmTransactionWithPolling(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -455,7 +660,7 @@ const DashboardScreen = () => {
     }
   };
 
-  const handleDeleteRecord = async (recordId: string, title: string) => {
+  const handleDeleteRecord = async (recordId: number) => {
     try {
       setDeleteLoading(recordId);
       await deleteRecordTransaction(recordId);
@@ -476,7 +681,7 @@ const DashboardScreen = () => {
     while (Date.now() - start < timeout) {
       try {
         const status = await connection.getSignatureStatus(txid);
-
+        console.log('polling...');
         if (
           status?.value?.confirmationStatus === commitment ||
           status?.value?.confirmationStatus === 'finalized'
@@ -499,7 +704,7 @@ const DashboardScreen = () => {
   };
 
   const deleteRecordTransaction = useCallback(
-    async (recordId: string) => {
+    async (recordId: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -509,10 +714,8 @@ const DashboardScreen = () => {
 
           const userPubkey = authorizationResult.publicKey;
 
-          const numericRecordId = parseInt(recordId.replace('REC', ''));
-
           const recordIdBuffer = Buffer.alloc(8);
-          recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
+          recordIdBuffer.writeBigUInt64LE(BigInt(recordId), 0);
 
           const [userVaultPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('user_vault'), userPubkey.toBuffer()],
@@ -577,7 +780,7 @@ const DashboardScreen = () => {
             message: 'Record deleted successfully!',
           });
 
-          await fetchRecords();
+          await fetchUserRecords();
 
           return signedTxs[0];
         } catch (error: any) {
@@ -602,11 +805,12 @@ const DashboardScreen = () => {
     [authorizeSession, connection, toast],
   );
 
-  const renderItem = ({item}: {item: RecordType}) => (
+  const renderItem = (item: RecordType) => (
     <RecordCard
       record={item}
       navigate={navigate}
       onDelete={handleDeleteRecord}
+      key={item.id}
     />
   );
 
@@ -614,102 +818,134 @@ const DashboardScreen = () => {
     <LinearGradient
       colors={['#001F3F', '#003366', '#001F3F']}
       style={styles.container}>
-      <View style={styles.wrapper}>
-        <Text style={styles.heading}>
-          {isUser ? 'Your Records' : 'Organization Dashboard'}
-        </Text>
+      {loading ? (
+        <View>
+          <ActivityIndicator style={styles.loading} size="large" color="#fff" />
+          <Text style={styles.loadingText}>Please wait...</Text>
+        </View>
+      ) : (
+        <View style={styles.wrapper}>
+          <Text style={styles.heading}>
+            {isUser ? 'Your Records' : 'Organization Dashboard'}
+          </Text>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          {isUser ? (
-            <>
-              <StatCard title="Total Records" value={10} icon="folder" />
-              <StatCard title="Shared with Orgs" value={10} icon="share" />
-            </>
-          ) : (
-            <>
-              {registeredOrganization ? (
-                <>
-                  <StatCard
-                    title="Records Accessed"
-                    value={5}
-                    icon="visibility"
-                  />
-                </>
-              ) : (
-                <View style={styles.registrationForm}>
-                  <Text style={styles.formHeading}>
-                    Your organization is not registered. Please create an
-                    account to continue using the application.
-                  </Text>
+          <View style={styles.statsContainer}>
+            {isUser ? (
+              <>
+                <StatCard
+                  title="Total Records"
+                  value={userRecordsCount}
+                  icon="folder"
+                />
+                <StatCard
+                  title="Shared with Orgs"
+                  value={sharedRecordsCount}
+                  icon="share"
+                />
+              </>
+            ) : (
+              <>
+                {registeredOrganization ? (
+                  <>
+                    <StatCard
+                      title="Records Accessed"
+                      value={accessListLength}
+                      icon="visibility"
+                    />
+                  </>
+                ) : (
+                  <View style={styles.registrationForm}>
+                    <Text style={styles.formHeading}>
+                      Your organization is not registered. Please create an
+                      account to continue using the application.
+                    </Text>
 
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Name"
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    maxLength={50}
-                    value={name}
-                    onChangeText={setName}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Description"
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    maxLength={100}
-                    value={description}
-                    onChangeText={setDescription}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    multiline={true}
-                    numberOfLines={3}
-                    placeholder="Contact Info"
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    maxLength={255}
-                    value={contactInfo}
-                    onChangeText={setContactInfo}
-                  />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Name"
+                      placeholderTextColor="rgba(255,255,255,0.6)"
+                      maxLength={50}
+                      value={name}
+                      onChangeText={setName}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Description"
+                      placeholderTextColor="rgba(255,255,255,0.6)"
+                      maxLength={100}
+                      value={description}
+                      onChangeText={setDescription}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      multiline={true}
+                      numberOfLines={3}
+                      placeholder="Contact Info"
+                      placeholderTextColor="rgba(255,255,255,0.6)"
+                      maxLength={255}
+                      value={contactInfo}
+                      onChangeText={setContactInfo}
+                    />
 
-                  <TouchableOpacity
-                    style={styles.registerButton}
-                    onPress={() => {
-                      onClickRegisterOrg();
-                    }}>
-                    <Text style={styles.registerButtonText}>Register</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.registerButton}
+                      onPress={() => {
+                        onClickRegisterOrg();
+                      }}>
+                      <Text style={styles.registerButtonText}>Register</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+
+          {/* Action Button */}
+          {isUser && (
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={() => {
+                navigate('Upload');
+              }}>
+              <Icon name="cloud-upload" size={20} color="#fff" />
+              <Text style={styles.uploadButtonText}>Upload New Record</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Record List with RefreshControl */}
+          {(isUser || (registeredOrganization && isOrg)) && (
+            <ScrollView
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={['#004080']} // Android
+                  tintColor="#004080" // iOS
+                  title="Pull to refresh" // iOS
+                  titleColor="#fff" // iOS
+                />
+              }>
+              <View style={styles.listContainer}>
+                <Text style={styles.sectionHeading}>Records</Text>
+                <View>{records.map(renderItem)}</View>
+                <View>
+                  {records.length === 0 && userRecordsLoading && (
+                    <Text
+                      style={{
+                        textAlign: 'center',
+                        fontSize: 16,
+                        color: '#fff',
+                        marginTop: 16,
+                      }}>
+                      No Records Found
+                    </Text>
+                  )}
                 </View>
-              )}
-            </>
+              </View>
+            </ScrollView>
           )}
         </View>
-
-        {/* Action Button */}
-        {isUser && (
-          <TouchableOpacity
-            style={styles.uploadButton}
-            onPress={() => {
-              navigate('Upload');
-            }}>
-            <Icon name="cloud-upload" size={20} color="#fff" />
-            <Text style={styles.uploadButtonText}>Upload New Record</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Record List */}
-        {(isUser || (registeredOrganization && isOrg)) && (
-          <ScrollView>
-            <View style={styles.listContainer}>
-              <Text style={styles.sectionHeading}>Records</Text>
-              <FlatList
-                contentContainerStyle={styles.listContainer}
-                data={records}
-                keyExtractor={item => item.id}
-                renderItem={renderItem}
-              />
-            </View>
-          </ScrollView>
-        )}
-      </View>
+      )}
     </LinearGradient>
   );
 };
@@ -738,6 +974,19 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 50,
+  },
+  loading: {
+    flex: 1,
+    marginTop: 70,
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 22,
+    justifyContent: 'center',
+    textAlign: 'center',
+    fontWeight: '500',
+    color: '#f5f5f5ff',
   },
   heading: {
     fontSize: 22,
