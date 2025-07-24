@@ -1,9 +1,12 @@
 import React from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
-import { ConnectionProvider } from './components/providers/ConnectionProvider';
-import { AuthorizationProvider } from './components/providers/AuthorizationProvider';
-import { NavigationProvider, useNavigation } from './components/providers/NavigationProvider';
-import { TextEncoder, TextDecoder } from 'text-encoding';
+import {SafeAreaView, StyleSheet} from 'react-native';
+import {ConnectionProvider} from './components/providers/ConnectionProvider';
+import {AuthorizationProvider} from './components/providers/AuthorizationProvider';
+import {
+  NavigationProvider,
+  useNavigation,
+} from './components/providers/NavigationProvider';
+import {TextEncoder, TextDecoder} from 'text-encoding';
 
 import ConnectWalletScreen from './screens/ConnectWalletScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -12,8 +15,8 @@ import ViewRecordsScreen from './screens/ViewRecordsScreen';
 import OrganizationsScreen from './screens/OrganizationsScreen';
 import RegisterOrganizationScreen from './screens/RegisterOrganizationScreen';
 import ShareRecordDialogScreen from './screens/ShareRecordDialogScreen';
-import { ToastProvider } from './components/providers/ToastContext';
-import { TEEStateProvider } from './components/providers/TEEStateProvider';
+import {ToastProvider} from './components/providers/ToastContext';
+import {TEEStateProvider} from './components/providers/TEEStateProvider';
 
 if (typeof global.TextEncoder === 'undefined') {
   global.TextEncoder = TextEncoder as any;
@@ -23,7 +26,7 @@ if (typeof global.TextDecoder === 'undefined') {
 }
 
 function AppNavigator() {
-  const { currentScreen } = useNavigation();
+  const {currentScreen} = useNavigation();
 
   switch (currentScreen) {
     case 'ConnectWallet':
@@ -50,11 +53,13 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <ConnectionProvider config={{ commitment: 'processed' }} endpoint={'https://40v82shj-8899.inc1.devtunnels.ms/'}>
+    <ConnectionProvider
+      config={{commitment: 'processed'}}
+      endpoint={'https://40v82shj-8899.inc1.devtunnels.ms/'}>
       <AuthorizationProvider>
         <TEEStateProvider>
           <NavigationProvider>
-            <ToastProvider >
+            <ToastProvider>
               <SafeAreaView style={styles.shell}>
                 <AppNavigator />
               </SafeAreaView>
@@ -68,6 +73,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   shell: {
-    height: '100%'
+    height: '100%',
   },
 });

@@ -11,6 +11,8 @@ import {
   Platform,
   NativeModules,
   ScrollView,
+  Alert,
+  Keyboard,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -33,6 +35,7 @@ import {encodeAnchorString} from './DashboardScreen';
 import {useToast} from '../components/providers/ToastContext';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
 import {sha256} from '@noble/hashes/sha256';
+import RNFS from 'react-native-fs';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   // Decode the PEM wrapper
@@ -60,14 +63,13 @@ type EncryptResult = {
 };
 
 const {Encryptor} = NativeModules;
-
 const UploadRecordScreen = () => {
   const {connection} = useConnection();
   const {navigate, goBack} = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
 
   const {teeState} = useTEEContext();
 
@@ -80,36 +82,38 @@ const UploadRecordScreen = () => {
     }
   }, [teeState]);
 
-  const uploadToIPFS = async (enc: EncryptResult): Promise<string> => {
+  interface EncryptResult {
+    [key: string]: any;
+  }
+
+  const uploadToIPFS = async (enc: EncryptResult) => {
+    const url = 'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add';
+
+    const jsonData = enc;
+    const path = `${RNFS.TemporaryDirectoryPath}/data.json`;
+
     try {
-      const jsonBlob = new Blob([JSON.stringify(enc)], {
-        lastModified: new Date().getTime(),
+      // Write file to temp storage
+      await RNFS.writeFile(path, JSON.stringify(jsonData), 'utf8');
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: `file://${path}`,
+        name: 'data.json',
         type: 'application/json',
       });
 
-      const formData = new FormData();
-      formData.append('encrypted_record.json', jsonBlob);
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+      });
 
-      const response = await fetch(
-        'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add',
-        {
-          method: 'POST',
-          body: formData,
-        },
-      );
+      const result = await response.json();
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`IPFS upload failed: ${errorText}`);
-      }
-
-      const responseText = await response.text();
-      const result = JSON.parse(responseText);
-
-      console.log('Uploaded to local IPFS:', result);
+      console.log('Upload response:', result);
       return result.Hash;
     } catch (error) {
-      console.error('Error uploading to local IPFS:', error);
+      console.error('Error uploading to IPFS:', error);
       throw error;
     }
   };
@@ -117,11 +121,16 @@ const UploadRecordScreen = () => {
   const [uploadHealthRecordLoading, setUploadHealthRecordLoading] =
     useState<boolean>(false);
   const handleUpload = async () => {
+    Keyboard.dismiss();
+    if (!teeState || !selectedFile) {
+      Alert.alert('Error', 'File not selected or failed to encrypt');
+      return;
+    }
     try {
       setUploadHealthRecordLoading(true);
       const base64DerKey = extractBase64FromPemWrappedKey(teeState?.pubkey);
       const enc: EncryptResult = await Encryptor.encryptFromUri(
-        selectedFile.uri,
+        selectedFile?.uri,
         base64DerKey,
       );
       const cid = await uploadToIPFS(enc);
@@ -152,6 +161,41 @@ const UploadRecordScreen = () => {
       console.error('Error parsing record counter data:', error);
       return null;
     }
+  };
+
+  const confirmTransactionWithPolling = async (
+    txid,
+    commitment = 'confirmed',
+    timeout = 30000,
+  ) => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      try {
+        const status = await connection.getSignatureStatus(txid);
+
+        if (
+          status?.value?.confirmationStatus === commitment ||
+          status?.value?.confirmationStatus === 'finalized'
+        ) {
+          return status.value;
+        }
+
+        if (status?.value?.err) {
+          throw new Error(
+            `Transaction failed: ${JSON.stringify(status.value.err)}`,
+          );
+        }
+
+        // Wait 1 second before next poll
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.log('Polling error:', error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    throw new Error('Transaction confirmation timeout');
   };
 
   const toast = useToast();
@@ -307,6 +351,15 @@ const UploadRecordScreen = () => {
             transactions: [transaction],
           });
 
+          console.log('Form data....', title, description, {
+            recordId: currentRecordId,
+            title: testTitle,
+            description: testDescription,
+            mimeType: testMimeType,
+            fileSize: testFileSize,
+            healthRecordPda: healthRecordPda.toString(),
+          });
+
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
             {
@@ -317,19 +370,21 @@ const UploadRecordScreen = () => {
 
           console.log('txn111111');
 
-          const confirmation = await connection.confirmTransaction(
-            {
-              signature: txid,
-              ...latestBlockhash,
-            },
-            'confirmed',
-          );
+          // const confirmation = await connection.confirmTransaction(
+          //   {
+          //     signature: txid,
+          //     ...latestBlockhash,
+          //   },
+          //   'confirmed',
+          // );
 
-          if (confirmation.value.err) {
-            throw new Error(
-              `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
-            );
-          }
+          await confirmTransactionWithPolling(txid, 'confirmed');
+
+          // if (confirmation.value.err) {
+          //   throw new Error(
+          //     `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
+          //   );
+          // }
 
           console.log('Health record uploaded successfully:', {
             txid,
@@ -345,6 +400,10 @@ const UploadRecordScreen = () => {
             type: 'success',
             message: `Health record "${testTitle}" uploaded successfully!`,
           });
+
+          setTimeout(() => {
+            goBack();
+          }, 2000);
 
           return {
             transaction: signedTxs[0],
@@ -392,7 +451,7 @@ const UploadRecordScreen = () => {
         }
       });
     },
-    [authorizeSession, connection, toast],
+    [authorizeSession, connection, toast, title, description],
   );
 
   const handleFileSelect = async () => {
@@ -441,7 +500,10 @@ const UploadRecordScreen = () => {
                 placeholder="Record Title"
                 placeholderTextColor="#aaa"
                 value={title}
-                onChangeText={setTitle}
+                onChangeText={text => {
+                  console.log('📥 Title input:', text);
+                  setTitle(text);
+                }}
               />
 
               <TextInput
@@ -545,7 +607,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 4,
-    fontWeight: 500,
+    // fontWeight: 500,
   },
   uploadSubText: {
     fontSize: 13,
