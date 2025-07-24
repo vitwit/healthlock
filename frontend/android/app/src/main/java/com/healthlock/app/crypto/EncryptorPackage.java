@@ -1,4 +1,4 @@
-package com.frontend.crypto;
+package com.healthlock.crypto;
 
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.NativeModule;

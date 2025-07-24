@@ -1,4 +1,4 @@
-package com.frontend;
+package com.healthlock.app;
 
 import android.app.Application;
 import com.facebook.react.PackageList;
@@ -9,7 +9,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
 import com.facebook.react.defaults.DefaultReactNativeHost;
 import com.facebook.soloader.SoLoader;
 import java.util.List;
-import com.frontend.crypto.EncryptorPackage;
+import com.healthlock.crypto.EncryptorPackage;
 
 public class MainApplication extends Application implements ReactApplication {
 

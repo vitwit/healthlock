@@ -1,4 +1,4 @@
-package com.frontend.crypto;
+package com.healthlock.crypto;
 
 import android.content.Context;
 import android.net.Uri;
