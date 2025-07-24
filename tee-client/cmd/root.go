@@ -153,9 +153,11 @@ func startRESTServer(ctx *types.Context, cfg *config.Config, solClient *solana.C
 }
 
 type DecryptRequest struct {
-	CID       string `json:"cid"`       // IPFS CID of the encrypted JSON file
-	Signer    string `json:"signer"`    // Who is requesting
-	Signature string `json:"signature"` // Signed message
+	CID         string `json:"cid"`       // IPFS CID of the encrypted JSON file
+	Signer      string `json:"signer"`    // Who is requesting
+	Signature   string `json:"signature"` // Signed message
+	RecordOwner string `json:"recordOwner"`
+	RecordID    uint64 `json:"recordId"`
 }
 
 type ErrorResponse struct {
@@ -224,6 +226,52 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 		if req.CID == "" {
 			writeJSONError(w, "CID is required", http.StatusBadRequest)
 			return
+		}
+
+		// Parse pubkeys
+		recordOwnerPubkey, err := solanago.PublicKeyFromBase58(req.RecordOwner)
+		if err != nil {
+			writeJSONError(w, "Invalid record_owner pubkey", http.StatusBadRequest)
+			return
+		}
+		signerPubkey, err := solanago.PublicKeyFromBase58(req.Signer)
+		if err != nil {
+			writeJSONError(w, "Invalid signer pubkey", http.StatusBadRequest)
+			return
+		}
+
+		// Construct and verify signature
+		message := fmt.Sprintf("record-access:%s:%s:%d", req.Signer, req.RecordOwner, req.RecordID)
+		sig, err := solanago.SignatureFromBase58(req.Signature)
+		if err != nil {
+			writeJSONError(w, "Invalid signature", http.StatusBadRequest)
+			return
+		}
+		if !sig.Verify(signerPubkey, []byte(message)) {
+			writeJSONError(w, "Signature verification failed", http.StatusUnauthorized)
+			return
+		}
+
+		// Read from Solana
+		record, err := solClient.ReadHealthRecord(ctx, recordOwnerPubkey, req.RecordID)
+		if err != nil {
+			writeJSONError(w, "Failed to fetch health record", http.StatusInternalServerError)
+			return
+		}
+
+		if !record.Owner.Equals(recordOwnerPubkey) {
+			authorized := false
+			for i := 0; i < len(record.AccessList); i++ {
+				if record.AccessList[i].Organization.Equals(signerPubkey) {
+					authorized = true
+					break
+				}
+			}
+
+			if !authorized {
+				writeJSONError(w, "Not authorized to view this document", http.StatusUnauthorized)
+				return
+			}
 		}
 
 		ipfsData, err := DownloadJsonFromPinata(req.CID)

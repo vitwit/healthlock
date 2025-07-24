@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,14 @@ import {
   RefreshControl, // Add this import
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {useNavigation} from '../components/providers/NavigationProvider';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {useConnection} from '../components/providers/ConnectionProvider';
-import {PublicKey} from '@solana/web3.js';
-import {sha256} from 'js-sha256';
-import {ERR_UNKNOWN, PROGRAM_ID, TEE_STATE} from '../util/constants';
-import RecordCard, {RecordType} from '../components/RecordCard';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { PublicKey } from '@solana/web3.js';
+import { sha256 } from 'js-sha256';
+import { ERR_UNKNOWN, PROGRAM_ID, TEE_STATE } from '../util/constants';
+import RecordCard, { RecordType } from '../components/RecordCard';
 import bs58 from 'bs58';
 import {
   Transaction,
@@ -29,10 +29,10 @@ import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import {getOrganization, Organization} from '../api/organization';
-import {useToast} from '../components/providers/ToastContext';
-import {parseTEEState} from '../api/state';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
+import { getOrganization, Organization } from '../api/organization';
+import { useToast } from '../components/providers/ToastContext';
+import { parseTEEState } from '../api/state';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
 
 export function encodeAnchorString(str: string): Buffer {
   const strBuf = Buffer.from(str, 'utf8');
@@ -42,8 +42,8 @@ export function encodeAnchorString(str: string): Buffer {
 }
 
 const DashboardScreen = () => {
-  const {selectedAccount} = useAuthorization();
-  const {selectedRole} = useNavigation();
+  const { selectedAccount } = useAuthorization();
+  const { selectedRole } = useNavigation();
 
   console.log('address>>>>>>>>>>>>>>.', selectedAccount?.publicKey.toBase58());
 
@@ -68,8 +68,8 @@ const DashboardScreen = () => {
   const [userRecordsLoading, setUserRecordsLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false); // Add refresh state
 
-  const {navigate, goBack} = useNavigation();
-  const {connection} = useConnection();
+  const { navigate, goBack } = useNavigation();
+  const { connection } = useConnection();
   const [accessListLength, setaccessListLength] = useState<number>(0);
 
   const [publicKey, setPublicKey] = useState<PublicKey>();
@@ -87,7 +87,7 @@ const DashboardScreen = () => {
     return teeStatePDA;
   };
 
-  const {teeState, setTEEState} = useTEEContext();
+  const { teeState, setTEEState } = useTEEContext();
 
   function parseUserVault(data: Buffer) {
     let offset = 8;
@@ -115,7 +115,7 @@ const DashboardScreen = () => {
     try {
       setLoading(true);
       const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-        filters: [{dataSize: 1073}],
+        filters: [{ dataSize: 1073 }],
       });
 
       console.log('Parsed TEE Node:', accounts);
@@ -173,7 +173,7 @@ const DashboardScreen = () => {
       if (error && error.message === 'Organization account not found') {
         setRegisteredOrganization(false);
       } else {
-        toast.show({type: 'error', message: error?.message || ERR_UNKNOWN});
+        toast.show({ type: 'error', message: error?.message || ERR_UNKNOWN });
       }
     } finally {
       setOrganizationLoading(false);
@@ -328,7 +328,7 @@ const DashboardScreen = () => {
         offset += titleLen;
 
         console.log('✅ Parsed Organization Record:', {
-          id: `REC${record_id}`,
+          id: record_id,
           title,
           description,
           owner: owner.toBase58(),
@@ -337,7 +337,7 @@ const DashboardScreen = () => {
         });
 
         parsedRecords.push({
-          id: `REC${record_id}`,
+          id: record_id,
           title,
           description,
           encryptedData,
@@ -512,6 +512,7 @@ const DashboardScreen = () => {
             encryptedData,
             createdAt,
             accessGrantedTo: accessListLen,
+            owner: owner.toBase58(),
           });
         } catch (err: any) {
           console.error('❌ Failed to parse a record:', err?.message);
@@ -560,7 +561,7 @@ const DashboardScreen = () => {
     }
   }, [isUser, isOrg, registeredOrganization]);
 
-  const {authorizeSession} = useAuthorization();
+  const { authorizeSession } = useAuthorization();
 
   const registerOrganizationTransaction = useCallback(
     async (name: string, description: string, contactInfo: string) => {
@@ -589,8 +590,8 @@ const DashboardScreen = () => {
             encodeAnchorString(contactInfo),
           ]);
           const keys = [
-            {pubkey: organizationPDA, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: organizationPDA, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -611,7 +612,7 @@ const DashboardScreen = () => {
 
           tx.add(ix);
 
-          const signedTxs = await wallet.signTransactions({transactions: [tx]});
+          const signedTxs = await wallet.signTransactions({ transactions: [tx] });
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
           );
@@ -672,7 +673,7 @@ const DashboardScreen = () => {
   };
 
   const confirmTransactionWithPolling = async (
-    txid,
+    txid: string,
     commitment = 'confirmed',
     timeout = 30000,
   ) => {
@@ -743,9 +744,9 @@ const DashboardScreen = () => {
 
           // Accounts must match the order in your Rust struct
           const keys = [
-            {pubkey: userVaultPda, isSigner: false, isWritable: true},
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: userVaultPda, isSigner: false, isWritable: true },
+            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
           ];
 
           const instruction = new TransactionInstruction({
