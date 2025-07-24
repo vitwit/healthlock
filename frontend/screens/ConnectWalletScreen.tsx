@@ -1,30 +1,23 @@
-import React, { useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, {useEffect} from 'react';
+import {StyleSheet, Text, View} from 'react-native';
 
 import ConnectButton from '../components/ConnectButton';
-import {
-  useAuthorization,
-} from '../components/providers/AuthorizationProvider';
+import {useAuthorization} from '../components/providers/AuthorizationProvider';
 
 import LinearGradient from 'react-native-linear-gradient';
-import { useNavigation } from '../components/providers/NavigationProvider';
+import {useNavigation} from '../components/providers/NavigationProvider';
 import SelectRoleCard from '../components/SelectRoleCard';
-import { useToast } from '../components/providers/ToastContext';
+import {useToast} from '../components/providers/ToastContext';
 
 const ConnectWalletScreen: React.FC = () => {
+  const {navigate, setSelectedRole, selectedRole} = useNavigation();
 
-  const { navigate, setSelectedRole, selectedRole } = useNavigation();
-
-  const { selectedAccount } = useAuthorization();
+  const {selectedAccount} = useAuthorization();
   const toast = useToast();
 
   useEffect(() => {
     if (selectedAccount) {
-      navigate('Dashboard')
+      navigate('Dashboard');
     }
   }, [selectedAccount]);
 
@@ -39,19 +32,23 @@ const ConnectWalletScreen: React.FC = () => {
         <View style={styles.cardContainer}>
           <>
             <SelectRoleCard
-              description='Manage your personal health records'
-              title='User'
-              icon='person-pin'
-              selected={selectedRole === "user"}
-              onPress={() => { setSelectedRole('user') }}
+              description="Manage your personal health records"
+              title="User"
+              icon="person-pin"
+              selected={selectedRole === 'user'}
+              onPress={() => {
+                setSelectedRole('user');
+              }}
             />
 
             <SelectRoleCard
-              description='Access and manage records'
-              title='Organization'
-              icon='domain'
-              selected={selectedRole === "organization"}
-              onPress={() => { setSelectedRole('organization') }}
+              description="Access and manage records"
+              title="Organization"
+              icon="domain"
+              selected={selectedRole === 'organization'}
+              onPress={() => {
+                setSelectedRole('organization');
+              }}
             />
           </>
         </View>
@@ -61,16 +58,13 @@ const ConnectWalletScreen: React.FC = () => {
             onError={(message: string) => {
               toast.show({
                 message: message,
-                type: "error"
-              })
+                type: 'error',
+              });
             }}
           />
         </View>
       </View>
     </LinearGradient>
-
-
-
   );
 };
 const styles = StyleSheet.create({

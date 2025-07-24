@@ -72,7 +72,6 @@ const ShareRecordDialogScreen = () => {
         setLoading(true);
         const fetchedOrgs = await fetchAllOrganizations();
 
-        console.log(fetchedOrgs);
         const transformedOrgs: OrganizationType[] = fetchedOrgs.map(org => ({
           organization_id: org.organization_id,
           description: org.description,
@@ -155,16 +154,6 @@ const ShareRecordDialogScreen = () => {
       record_ids.push(recordId);
       offset += 8;
     }
-
-    console.log('data of org.....', {
-      owner,
-      organization_id,
-      name,
-      contact_info,
-      created_at,
-      description,
-      record_ids,
-    });
 
     return {
       owner,
@@ -277,12 +266,9 @@ const ShareRecordDialogScreen = () => {
   }
 
   const fetchRecords = async () => {
-    console.log('🔍 Fetching records...');
     if (!publicKey) {
-      console.log('inside');
       return;
     }
-    console.log('🔍 Fetching records...');
     setLoading(true);
 
     try {
@@ -469,12 +455,6 @@ const ShareRecordDialogScreen = () => {
             PROGRAM_ID,
           );
 
-          console.log(
-            'organization pubkey>>>>>>>>>>>>',
-            organizationPublicKey.toBase58(),
-            userPubkey.toBase58(),
-          );
-
           // Create discriminator for revoke_access function
           const discriminator = Buffer.from(
             sha256.digest('global:revoke_access'),
@@ -524,14 +504,11 @@ const ShareRecordDialogScreen = () => {
 
           await confirmTransactionWithPolling(txid, 'confirmed');
 
-          // setOrganizationsWithAccess(prev => prev.filter(id => id !== orgID));
-
           toast.show({
             type: 'success',
             message: 'Access revoked successfully!',
           });
 
-          // await fetchRecords();
           return signedTxs[0];
         } catch (error: any) {
           console.error('Revoke access transaction error:', error);
@@ -605,11 +582,6 @@ const ShareRecordDialogScreen = () => {
               organization.owner.toBuffer(),
             ]);
 
-            console.log(
-              'granting.....',
-              organization.owner.toBase58(),
-              userPubkey.toBase58(),
-            );
             const keys = [
               {pubkey: healthRecordPda, isSigner: false, isWritable: true},
               {pubkey: organizationPDA, isSigner: false, isWritable: true},
@@ -790,7 +762,7 @@ const ShareRecordDialogScreen = () => {
           onPress={() => {
             handleShare();
           }}>
-          <Text style={styles.shareButtonText}>🔗 Share Selected Records</Text>
+          <Text style={styles.shareButtonText}>🔗 Share To Selected Orgs</Text>
         </TouchableOpacity>
       </LinearGradient>
     </SafeAreaView>

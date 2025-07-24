@@ -616,7 +616,7 @@ const DashboardScreen = () => {
             signedTxs[0].serialize(),
           );
 
-          await connection.confirmTransaction(txid, 'confirmed');
+          await confirmTransactionWithPolling(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -681,7 +681,7 @@ const DashboardScreen = () => {
     while (Date.now() - start < timeout) {
       try {
         const status = await connection.getSignatureStatus(txid);
-
+        console.log('polling...');
         if (
           status?.value?.confirmationStatus === commitment ||
           status?.value?.confirmationStatus === 'finalized'

@@ -160,11 +160,11 @@ async function main() {
   //   console.error('❌  organization Setup failed:', err);
   // }
 
-  try {
-    await client.fetchAllOrganizations();
-  } catch (err) {
-    console.error('❌  organization Setup failed:', err);
-  }
+  // try {
+  //   await client.fetchAllOrganizations();
+  // } catch (err) {
+  //   console.error('❌  organization Setup failed:', err);
+  // }
 
   // try {
   //   await client.fetchAllRecords(authority);
