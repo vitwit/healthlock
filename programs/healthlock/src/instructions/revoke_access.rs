@@ -6,14 +6,20 @@ use crate::state::*;
 
 pub fn revoke_access(
     ctx: Context<RevokeAccess>,
-    _record_id: u64,
+    record_id: u64,
     organization: Pubkey,
 ) -> Result<()> {
     let health_record = &mut ctx.accounts.health_record;
+    let organization_account = &mut ctx.accounts.organization;
 
     require!(
         health_record.owner == ctx.accounts.owner.key(),
         ErrorCode::UnauthorizedAccess
+    );
+
+    require!(
+        organization.key() == organization,
+        ErrorCode::InvalidOrganization
     );
 
     let access_index = health_record
@@ -23,6 +29,15 @@ pub fn revoke_access(
         .ok_or(ErrorCode::AccessNotFound)?;
 
     health_record.access_list.remove(access_index);
+
+    let record_index = organization_account
+        .record_ids
+        .iter()
+        .position(|&id| id == record_id)
+        .ok_or(ErrorCode::RecordNotFoundInOrganization)?;
+    
+    organization_account.record_ids.remove(record_index);
+    
 
     emit!(AccessRevoked {
         record_owner: ctx.accounts.owner.key(),
@@ -48,6 +63,13 @@ pub struct RevokeAccess<'info> {
         bump
     )]
     pub health_record: Account<'info, HealthRecord>,
+
+    #[account(
+        mut,
+        seeds = [b"organization", organization.owner.as_ref()],
+        bump,
+    )]
+    pub organization: Account<'info, Organization>,
 
     #[account(mut)]
     pub owner: Signer<'info>,

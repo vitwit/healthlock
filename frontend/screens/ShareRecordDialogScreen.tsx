@@ -20,11 +20,7 @@ import {sha256} from 'js-sha256';
 import {PublicKey} from '@solana/web3.js';
 import {useConnection} from '../components/providers/ConnectionProvider';
 import bs58 from 'bs58';
-import {
-  Transaction,
-  SystemProgram,
-  TransactionInstruction,
-} from '@solana/web3.js';
+import {Transaction, TransactionInstruction} from '@solana/web3.js';
 import {PROGRAM_ID} from '../util/constants';
 import {RecordType} from '../components/RecordCard';
 
@@ -38,21 +34,17 @@ type OrganizationType = {
   record_ids: number[];
 };
 
-type OrgType = {
-  id: string;
-  name: string;
-  type: string;
-  publicKey: PublicKey;
-};
-
 const ShareRecordDialogScreen = () => {
   const toast = useToast();
   const {selectedAccount} = useAuthorization();
   const {connection} = useConnection();
   const [records, setRecords] = useState<RecordType[]>([]);
+  const [organizationsWithAccess, setOrganizationsWithAccess] = useState<
+    string[]
+  >([]);
   const {goBack, currentParams} = useNavigation();
   const {authorizeSession} = useAuthorization();
-  const [organizations, setOrganizations] = useState<OrgType[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationType[]>([]);
   const [selectedOrgs, setSelectedOrgs] = useState<{[key: string]: boolean}>({
     org1: true,
     org2: false,
@@ -60,6 +52,9 @@ const ShareRecordDialogScreen = () => {
   });
   const [loading, setLoading] = useState(true);
   const [shareLoading, setShareLoading] = useState<string | null>(null);
+  const [revokeAccessLoading, setRevokeAccessLoading] = useState<string | null>(
+    null,
+  );
   const {accounts} = useAuthorization();
   const [publicKey, setPublicKey] = useState<PublicKey>();
 
@@ -77,11 +72,15 @@ const ShareRecordDialogScreen = () => {
         setLoading(true);
         const fetchedOrgs = await fetchAllOrganizations();
 
-        const transformedOrgs: OrgType[] = fetchedOrgs.map(org => ({
-          id: org.organization_id.toString(),
+        console.log(fetchedOrgs);
+        const transformedOrgs: OrganizationType[] = fetchedOrgs.map(org => ({
+          organization_id: org.organization_id,
+          description: org.description,
+          owner: org.owner,
           name: org.name,
-          type: `${org.description} • Verified ✓`,
-          publicKey: org.owner,
+          record_ids: org.record_ids,
+          contact_info: org.contact_info,
+          created_at: org.created_at,
         }));
 
         setOrganizations(transformedOrgs);
@@ -105,7 +104,7 @@ const ShareRecordDialogScreen = () => {
     loadOrganizations();
   }, []);
 
-  const toggleOrg = (id: string) => {
+  const toggleOrg = (id: number) => {
     setSelectedOrgs(prev => ({...prev, [id]: !prev[id]}));
   };
 
@@ -376,7 +375,6 @@ const ShareRecordDialogScreen = () => {
           offset += 4;
           offset += mimeLen;
 
-          const fileSize = Number(data.readBigUInt64LE(offset));
           offset += 8;
 
           const descLen = data.readUInt32LE(offset);
@@ -407,7 +405,7 @@ const ShareRecordDialogScreen = () => {
           });
 
           parsedRecords.push({
-            id: `REC${record_id}`,
+            id: record_id,
             title,
             description,
             encryptedData,
@@ -429,8 +427,131 @@ const ShareRecordDialogScreen = () => {
     }
   };
 
+  const revokeAccessTransaction = useCallback(
+    async (recordId: number, organizationPublicKey: PublicKey) => {
+      return await transact(async (wallet: Web3MobileWallet) => {
+        try {
+          const [authorizationResult, latestBlockhash] = await Promise.all([
+            authorizeSession(wallet),
+            connection.getLatestBlockhash(),
+          ]);
+
+          const userPubkey = authorizationResult.publicKey;
+
+          // Convert record ID to numeric format
+          const numericRecordId = recordId;
+          const recordIdBuffer = Buffer.alloc(8);
+          recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
+
+          // Find health record PDA
+          const [healthRecordPda] = PublicKey.findProgramAddressSync(
+            [
+              Buffer.from('health_record'),
+              userPubkey.toBuffer(),
+              recordIdBuffer,
+            ],
+            PROGRAM_ID,
+          );
+
+          // Find organization PDA todo
+          // const [organizationPDA] = await PublicKey.findProgramAddress(
+          //   [Buffer.from('organization'), organizationPublicKey.toBuffer()],
+          //   PROGRAM_ID,
+          // );
+
+          const [organizationPDA] = await PublicKey.findProgramAddress(
+            [Buffer.from('organization'), userPubkey.toBuffer()],
+            PROGRAM_ID,
+          );
+
+          // Create discriminator for revoke_access function
+          const discriminator = Buffer.from(
+            sha256.digest('global:revoke_access'),
+          ).slice(0, 8);
+
+          // Create instruction data
+          const instructionData = Buffer.concat([
+            discriminator,
+            recordIdBuffer,
+            userPubkey.toBuffer(),
+          ]);
+
+          // Define account keys
+          const keys = [
+            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+            {pubkey: organizationPDA, isSigner: false, isWritable: true},
+            {pubkey: userPubkey, isSigner: true, isWritable: true},
+          ];
+
+          // Create transaction instruction
+          const instruction = new TransactionInstruction({
+            keys,
+            programId: PROGRAM_ID,
+            data: instructionData,
+          });
+
+          // Create and configure transaction
+          const transaction = new Transaction({
+            ...latestBlockhash,
+            feePayer: userPubkey,
+          });
+
+          transaction.add(instruction);
+
+          // Sign and send transaction
+          const signedTxs = await wallet.signTransactions({
+            transactions: [transaction],
+          });
+
+          const txid = await connection.sendRawTransaction(
+            signedTxs[0].serialize(),
+            {
+              skipPreflight: false,
+              preflightCommitment: 'processed',
+            },
+          );
+
+          await confirmTransactionWithPolling(txid, 'confirmed');
+
+          // setOrganizationsWithAccess(prev => prev.filter(id => id !== orgID));
+
+          toast.show({
+            type: 'success',
+            message: 'Access revoked successfully!',
+          });
+
+          // await fetchRecords();
+          return signedTxs[0];
+        } catch (error: any) {
+          console.error('Revoke access transaction error:', error);
+
+          let errorMessage = 'Failed to revoke access';
+          if (error.message?.includes('UnauthorizedAccess')) {
+            errorMessage = 'You are not authorized to revoke access';
+          } else if (error.message?.includes('AccessNotFound')) {
+            errorMessage = 'Access not found for this organization';
+          } else if (error.message?.includes('InvalidOrganization')) {
+            errorMessage = 'Invalid organization';
+          } else if (error.message?.includes('RecordNotFoundInOrganization')) {
+            errorMessage = 'Record not found in organization';
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+
+          toast.show({
+            type: 'error',
+            message: errorMessage,
+          });
+
+          throw error;
+        }
+      });
+    },
+    [authorizeSession, connection, toast],
+  );
+
   const shareRecordTransaction = useCallback(
-    async (recordId: string, selectedOrganizations: OrgType[]) => {
+    async (recordId: string, selectedOrganizations: OrganizationType[]) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -444,7 +565,7 @@ const ShareRecordDialogScreen = () => {
             PROGRAM_ID,
           );
 
-          const numericRecordId = parseInt(recordId.replace('REC', ''));
+          const numericRecordId = recordId;
           const recordIdBuffer = Buffer.alloc(8);
           recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
 
@@ -470,7 +591,7 @@ const ShareRecordDialogScreen = () => {
             const instructionData = Buffer.concat([
               discriminator,
               recordIdBuffer,
-              organization.publicKey.toBuffer(),
+              userPubkey.toBuffer(),
             ]);
 
             const keys = [
@@ -533,9 +654,50 @@ const ShareRecordDialogScreen = () => {
     },
     [authorizeSession, connection, toast],
   );
+
+  const handleRevokeAccess = async (
+    orgId: number,
+    organizationPublicKey: PublicKey,
+  ) => {
+    try {
+      const recordId = currentParams?.record?.id;
+
+      if (!recordId) {
+        toast.show({
+          type: 'error',
+          message: 'No record ID found',
+        });
+        return;
+      }
+
+      setRevokeAccessLoading(recordId);
+
+      await revokeAccessTransaction(recordId, organizationPublicKey);
+
+      // Optionally update local state to remove the organization from selected orgs
+      setSelectedOrgs(prev => {
+        const updated = {...prev};
+        delete updated[orgId];
+        return updated;
+      });
+
+      goBack();
+    } catch (error) {
+      console.error('Handle revoke access error:', error);
+      toast.show({
+        type: 'error',
+        message: 'Failed to revoke access',
+      });
+    } finally {
+      setRevokeAccessLoading(null);
+    }
+  };
+
   const handleShare = async () => {
     const recordId = currentParams?.record?.id;
-    const selectedOrgList = organizations.filter(org => selectedOrgs[org.id]);
+    const selectedOrgList = organizations.filter(
+      org => selectedOrgs[org.organization_id],
+    );
     console.log(
       'Sharing with:',
       selectedOrgList.map(o => o.name),
@@ -544,6 +706,13 @@ const ShareRecordDialogScreen = () => {
     try {
       setShareLoading(recordId);
       await shareRecordTransaction(recordId, selectedOrgList);
+
+      const newOrgIds = selectedOrgList.map(org => org.organization_id);
+      setOrganizationsWithAccess(prev => {
+        const combined = [...prev, ...newOrgIds];
+        return [...new Set(combined)]; // Remove duplicates
+      });
+      setSelectedOrgs({});
 
       goBack();
     } catch (error) {
@@ -569,26 +738,38 @@ const ShareRecordDialogScreen = () => {
           <Text style={styles.recordTitle}>📄 Blood Test Results</Text>
         </View>
 
-        {/* Org List */}
         <ScrollView contentContainerStyle={styles.orgList}>
           {organizations.map(org => (
-            <TouchableOpacity
-              key={org.id}
-              style={styles.orgRow}
-              onPress={() => toggleOrg(org.id)}>
-              <Icon
-                name={
-                  selectedOrgs[org.id] ? 'check-box' : 'check-box-outline-blank'
-                }
-                size={22}
-                color="white"
-                style={styles.checkbox}
-              />
-              <View>
-                <Text style={styles.orgName}>{org.name}</Text>
-                <Text style={styles.orgType}>{org.type}</Text>
-              </View>
-            </TouchableOpacity>
+            <View key={org.organization_id} style={styles.orgRow}>
+              <TouchableOpacity
+                style={styles.orgInfo}
+                onPress={() => toggleOrg(org.organization_id)}>
+                <Icon
+                  name={
+                    selectedOrgs[org.organization_id]
+                      ? 'check-box'
+                      : 'check-box-outline-blank'
+                  }
+                  size={22}
+                  color="white"
+                  style={styles.checkbox}
+                />
+                <View>
+                  <Text style={styles.orgName}>{org.name}</Text>
+                  <Text style={styles.orgType}>{org.description}</Text>
+                </View>
+              </TouchableOpacity>
+              {org.record_ids?.includes(currentParams?.record?.id) && (
+                <TouchableOpacity
+                  style={styles.revokeButton}
+                  onPress={() =>
+                    handleRevokeAccess(org.organization_id, org.owner)
+                  }>
+                  <Icon name="remove-circle-outline" size={20} color="red" />
+                  <Text style={styles.revokeButtonText}>Revoke</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ))}
         </ScrollView>
 
@@ -640,10 +821,23 @@ const styles = StyleSheet.create({
   orgList: {
     paddingBottom: 20,
   },
+  // orgRow: {
+  //   flexDirection: 'row',
+  //   alignItems: 'flex-start',
+  //   marginBottom: 16,
+  // },
   orgRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
+    width: '100%',
+  },
+  orgInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+    marginRight: 10,
   },
   checkbox: {
     marginRight: 12,
@@ -665,11 +859,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
+  revokeButton: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    marginLeft: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  revokeButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   shareButtonText: {
     color: '#764BA2',
     fontWeight: '600',
     fontSize: 16,
   },
+  // revokeButton: {
+  //   flexDirection: 'row',
+  //   alignItems: 'center',
+  //   gap: 4, // or use marginLeft if gap not supported
+  // },
 });
 
 export default ShareRecordDialogScreen;

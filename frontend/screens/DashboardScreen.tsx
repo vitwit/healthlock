@@ -51,7 +51,18 @@ const DashboardScreen = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [contactInfo, setContactInfo] = useState('');
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
+  const [organizationLoading, setOrganizationLoading] =
+    useState<boolean>(false);
+  const [organization, setOrganization] = useState<Organization | undefined>(
+    undefined,
+  );
+  const [registeredOrganization, setRegisteredOrganization] =
+    useState<boolean>(false);
+  const [records, setRecords] = useState<RecordType[]>([]);
+  const [userRecordsCount, setUserRecordCount] = useState<number>(0);
+  const [sharedRecordsCount, setSharedRecordsCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
 
   const {navigate, goBack} = useNavigation();
   const {connection} = useConnection();
@@ -143,14 +154,6 @@ const DashboardScreen = () => {
         .catch(err => console.log('errr =======> ', err));
   }, []);
 
-  const [organizationLoading, setOrganizationLoading] =
-    useState<boolean>(false);
-  const [organization, setOrganization] = useState<Organization | undefined>(
-    undefined,
-  );
-  const [registeredOrganization, setRegisteredOrganization] =
-    useState<boolean>(false);
-
   const fetchOrganization = async () => {
     if (!publicKey) {
       console.log('Wallet not connected. Pubkey not found!');
@@ -180,9 +183,6 @@ const DashboardScreen = () => {
     if (isOrg) if (!publicKey) return;
     fetchOrganization();
   }, [isOrg, publicKey]);
-
-  const [records, setRecords] = useState<RecordType[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
 
   function getDiscriminator(name: string): Buffer {
     const hash = sha256.digest(`account:${name}`);
@@ -329,7 +329,7 @@ const DashboardScreen = () => {
           });
 
           parsedRecords.push({
-            id: `REC${record_id}`,
+            id: record_id,
             title,
             description,
             encryptedData,
@@ -343,6 +343,13 @@ const DashboardScreen = () => {
 
       console.log('📃 Parsed records:', parsedRecords);
       setRecords(parsedRecords);
+      setUserRecordCount(parsedRecords.length);
+
+      const total = parsedRecords.reduce(
+        (t, item) => t + item.accessGrantedTo,
+        0,
+      );
+      setSharedRecordsCount(total);
     } catch (err) {
       console.error('Failed to fetch health records:', err);
     } finally {
@@ -455,7 +462,7 @@ const DashboardScreen = () => {
     }
   };
 
-  const handleDeleteRecord = async (recordId: string, title: string) => {
+  const handleDeleteRecord = async (recordId: number) => {
     try {
       setDeleteLoading(recordId);
       await deleteRecordTransaction(recordId);
@@ -499,7 +506,7 @@ const DashboardScreen = () => {
   };
 
   const deleteRecordTransaction = useCallback(
-    async (recordId: string) => {
+    async (recordId: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -509,10 +516,9 @@ const DashboardScreen = () => {
 
           const userPubkey = authorizationResult.publicKey;
 
-          const numericRecordId = parseInt(recordId.replace('REC', ''));
 
           const recordIdBuffer = Buffer.alloc(8);
-          recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
+          recordIdBuffer.writeBigUInt64LE(BigInt(recordId), 0);
 
           const [userVaultPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('user_vault'), userPubkey.toBuffer()],
@@ -619,12 +625,19 @@ const DashboardScreen = () => {
           {isUser ? 'Your Records' : 'Organization Dashboard'}
         </Text>
 
-        {/* Stats Cards */}
         <View style={styles.statsContainer}>
           {isUser ? (
             <>
-              <StatCard title="Total Records" value={10} icon="folder" />
-              <StatCard title="Shared with Orgs" value={10} icon="share" />
+              <StatCard
+                title="Total Records"
+                value={userRecordsCount}
+                icon="folder"
+              />
+              <StatCard
+                title="Shared with Orgs"
+                value={sharedRecordsCount}
+                icon="share"
+              />
             </>
           ) : (
             <>

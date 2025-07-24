@@ -16,7 +16,6 @@ export class HealthLockClient {
   public provider: anchor.Provider;
   public creatorTokenAccount: anchor.web3.PublicKey;
 
-  // Seeds
   private readonly ORGANIZATION_SEED = 'organization';
   private readonly TEE_SEED = 'state';
   private readonly HEALTH_RECORD_SEED = 'health_record';
@@ -149,11 +148,11 @@ async function main() {
   const platformWallet = authority;
   const creator = authority;
 
-  try {
-    await client.initializeRecordCounter(authority);
-  } catch (err) {
-    console.error('❌ Setup failed:', err);
-  }
+  // try {
+  //   await client.initializeRecordCounter(authority);
+  // } catch (err) {
+  //   console.error('❌ Setup failed:', err);
+  // }
 
   // try {
   //   await client.registerOrganization("test-organization", "guddu", authority);
@@ -161,11 +160,11 @@ async function main() {
   //   console.error('❌  organization Setup failed:', err);
   // }
 
-  // try {
-  //   await client.fetchAllOrganizations();
-  // } catch (err) {
-  //   console.error('❌  organization Setup failed:', err);
-  // }
+  try {
+    await client.fetchAllOrganizations();
+  } catch (err) {
+    console.error('❌  organization Setup failed:', err);
+  }
 
   // try {
   //   await client.fetchAllRecords(authority);

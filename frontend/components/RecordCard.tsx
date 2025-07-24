@@ -8,7 +8,7 @@ import {useAuthorization} from './providers/AuthorizationProvider';
 import {useSolanaMessageSigner} from '../hooks/useSignMessage';
 
 export type RecordType = {
-  id: string;
+  id: number;
   title: string;
   description: string;
   createdAt: number;
