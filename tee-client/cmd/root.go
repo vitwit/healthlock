@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -13,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -228,8 +226,7 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 			return
 		}
 
-		// 🔄 Fetch encrypted JSON from IPFS
-		ipfsData, err := fetchFromIPFS(req.CID)
+		ipfsData, err := DownloadJsonFromPinata(req.CID)
 		if err != nil {
 			fmt.Printf("❌ Failed to fetch from IPFS: %v\n", err)
 			writeJSONError(w, "Failed to fetch file from IPFS", http.StatusBadGateway)
@@ -427,37 +424,4 @@ func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(data)
-}
-
-func fetchFromIPFS(cid string) ([]byte, error) {
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// Add the "arg" field like -F in curl
-	if err := writer.WriteField("arg", cid); err != nil {
-		return nil, fmt.Errorf("failed to write multipart field: %w", err)
-	}
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", "http://localhost:5001/api/v0/cat", &buf)
-	if err != nil {
-		return nil, fmt.Errorf("creating request failed: %w", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from IPFS: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("IPFS server returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	return io.ReadAll(resp.Body)
 }
