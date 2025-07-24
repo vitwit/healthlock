@@ -22,7 +22,6 @@ import {
   Transaction,
   SystemProgram,
   TransactionInstruction,
-  LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import {
   transact,
@@ -44,7 +43,7 @@ const DashboardScreen = () => {
   const {selectedAccount} = useAuthorization();
   const {selectedRole} = useNavigation();
 
-  console.log("account -----", selectedAccount?.publicKey.toBase58());
+  console.log('address>>>>>>>>>>>>>>.', selectedAccount?.publicKey.toBase58());
 
   const isUser = selectedRole === 'user';
   const isOrg = selectedRole === 'organization';
@@ -52,6 +51,7 @@ const DashboardScreen = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [contactInfo, setContactInfo] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   const {navigate, goBack} = useNavigation();
   const {connection} = useConnection();
@@ -77,6 +77,28 @@ const DashboardScreen = () => {
   };
 
   const {teeState, setTEEState} = useTEEContext();
+
+  function parseUserVault(data: Buffer) {
+    let offset = 8;
+
+    const owner = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+
+    const recordIdsLen = data.readUInt32LE(offset);
+    offset += 4;
+
+    const record_ids = [];
+    for (let i = 0; i < recordIdsLen; i++) {
+      const recordId = Number(data.readBigUInt64LE(offset));
+      record_ids.push(recordId);
+      offset += 8;
+    }
+
+    return {
+      owner,
+      record_ids,
+    };
+  }
 
   const fetchTEEState = async () => {
     try {
@@ -130,6 +152,10 @@ const DashboardScreen = () => {
     useState<boolean>(false);
 
   const fetchOrganization = async () => {
+    if (!publicKey) {
+      console.log('Wallet not connected. Pubkey not found!');
+      return;
+    }
     try {
       setOrganizationLoading(true);
       const result = await getOrganization(connection, publicKey);
@@ -163,204 +189,176 @@ const DashboardScreen = () => {
     return Buffer.from(hash).slice(0, 8);
   }
 
-  useEffect(() => {
-    const fetchRecords = async () => {
-      console.log('🔍 Fetching records...');
-      if (!publicKey) {
-        console.log('inside');
+  const fetchRecords = async () => {
+    console.log('🔍 Fetching records...');
+    if (!publicKey) {
+      console.log('inside');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const [userVaultPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('user_vault'), publicKey.toBuffer()],
+        PROGRAM_ID,
+      );
+
+      const userVaultAccount = await connection.getAccountInfo(userVaultPda);
+      if (!userVaultAccount) {
+        console.log('User vault not found');
+        setRecords([]);
         return;
       }
 
-      setLoading(true);
+      const userVault = parseUserVault(userVaultAccount.data);
+      const activeRecordIds = userVault.record_ids;
 
-      try {
-        const discriminator = getDiscriminator('HealthRecord');
+      if (activeRecordIds.length === 0) {
+        setRecords([]);
+        return;
+      }
 
-        const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-          filters: [
-            {
-              memcmp: {
-                offset: 0,
-                bytes: bs58.encode(discriminator),
-              },
+      const discriminator = getDiscriminator('HealthRecord');
+
+      const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+        filters: [
+          {
+            memcmp: {
+              offset: 0,
+              bytes: bs58.encode(discriminator),
             },
-            {
-              memcmp: {
-                offset: 8, // After discriminator, owner pubkey starts
-                bytes: publicKey.toBase58(),
-              },
+          },
+          {
+            memcmp: {
+              offset: 8,
+              bytes: publicKey.toBase58(),
             },
-          ],
-        });
+          },
+        ],
+      });
 
-        console.log('✅ Accounts found:', accounts.length);
+      console.log('✅ Accounts found:', accounts.length);
 
-        const parsedRecords: RecordType[] = [];
+      const parsedRecords: RecordType[] = [];
 
-        setRecords([
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '1',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '6',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '2',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '3',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '4',
-            title: 'CBP Report',
-          },
-          {
-            accessGrantedTo: 10,
-            createdAt: 1753008850,
-            description: ' CBP report Vijaya Diagnostics',
-            id: '5',
-            title: 'CBP Report',
-          },
-        ]);
+      for (const acc of accounts) {
+        const data = acc.account.data;
+        const totalLength = data.length;
+        let offset = 8;
 
-        for (const acc of accounts) {
-          const data = acc.account.data;
-          const totalLength = data.length;
-          let offset = 8; // Skip discriminator
+        try {
+          console.log('📦 Record buffer length:', totalLength);
 
+          const owner = new PublicKey(data.slice(offset, offset + 32));
+          console.log('👤 Owner:', owner.toBase58());
+          offset += 32;
+
+          const record_id = Number(data.readBigUInt64LE(offset));
+          offset += 8;
+
+          if (!activeRecordIds.includes(record_id)) {
+            continue;
+          }
+
+          const encLen = data.readUInt32LE(offset);
+          offset += 4;
+          if (offset + encLen > totalLength) {
+            throw new Error('Encrypted data exceeds buffer');
+          }
+          const encryptedData = data
+            .slice(offset, offset + encLen)
+            .toString('utf-8');
+          offset += encLen;
+
+          const createdAt = Number(data.readBigInt64LE(offset));
+          offset += 8;
+
+          let accessListLen = 0;
+          const accessListStart = offset;
           try {
-            console.log('📦 Record buffer length:', totalLength);
-
-            const owner = new PublicKey(data.slice(offset, offset + 32));
-            console.log('👤 Owner:', owner.toBase58());
-            offset += 32;
-
-            const record_id = Number(data.readBigUInt64LE(offset));
-            console.log('🔢 Record ID:', record_id);
-            offset += 8;
-
-            // Skip encrypted_data
-            const encLen = data.readUInt32LE(offset);
+            accessListLen = data.readUInt32LE(offset);
             offset += 4;
-            offset += encLen;
 
-            // Access list
-            let accessListLen = 0;
-            const accessListStart = offset;
-
-            try {
-              accessListLen = data.readUInt32LE(offset);
-              offset += 4;
-
-              const expectedAccessSize = accessListLen * (32 + 8);
-              if (offset + expectedAccessSize > totalLength) {
-                console.warn('⚠️ Skipping corrupt access list');
-                offset = accessListStart + 4; // Only skip the length field
-                accessListLen = 0;
-              } else {
-                offset += expectedAccessSize;
-              }
-            } catch (e) {
-              console.warn('⚠️ Failed to read access list — skipping');
+            const expectedAccessSize = accessListLen * (32 + 8);
+            if (offset + expectedAccessSize > totalLength) {
+              console.warn('⚠️ Skipping corrupt access list');
               offset = accessListStart + 4;
               accessListLen = 0;
+            } else {
+              offset += expectedAccessSize;
             }
-
-            // mime_type
-            const mimeLen = data.readUInt32LE(offset);
-            offset += 4;
-            offset += mimeLen;
-
-            // file_size
-            const fileSize = Number(data.readBigUInt64LE(offset));
-            offset += 8;
-
-            // created_at
-            const createdAt = Number(data.readBigInt64LE(offset));
-            offset += 8;
-
-            // title
-            const titleLen = data.readUInt32LE(offset);
-            offset += 4;
-            if (offset + titleLen > totalLength) {
-              console.log(
-                '📏 titleLen =',
-                titleLen,
-                '| remaining =',
-                totalLength - offset,
-              );
-              throw new Error('Title exceeds buffer');
-            }
-            const title = data
-              .slice(offset, offset + titleLen)
-              .toString('utf-8');
-            offset += titleLen;
-
-            // description
-            const descLen = data.readUInt32LE(offset);
-            offset += 4;
-            if (offset + descLen > totalLength) {
-              console.log(
-                '📏 descLen =',
-                descLen,
-                '| remaining =',
-                totalLength - offset,
-              );
-              throw new Error('Description exceeds buffer');
-            }
-            const description = data
-              .slice(offset, offset + descLen)
-              .toString('utf-8');
-            offset += descLen;
-
-            parsedRecords.push({
-              id: `REC${record_id}`,
-              title,
-              description,
-              createdAt,
-              accessGrantedTo: accessListLen,
-            });
-          } catch (err) {
-            console.error('❌ Failed to parse a record:', err?.message);
+          } catch (e) {
+            console.warn('⚠️ Failed to read access list — skipping');
+            offset = accessListStart + 4;
+            accessListLen = 0;
           }
+
+          const mimeLen = data.readUInt32LE(offset);
+          offset += 4;
+          offset += mimeLen;
+
+          const fileSize = Number(data.readBigUInt64LE(offset));
+          offset += 8;
+
+          const descLen = data.readUInt32LE(offset);
+          offset += 4;
+          if (offset + descLen > totalLength) {
+            throw new Error('Description exceeds buffer');
+          }
+          const description = data
+            .slice(offset, offset + descLen)
+            .toString('utf-8');
+          offset += descLen;
+
+          const titleLen = data.readUInt32LE(offset);
+          offset += 4;
+          if (offset + titleLen > totalLength) {
+            throw new Error('Title exceeds buffer');
+          }
+          const title = data.slice(offset, offset + titleLen).toString('utf-8');
+          offset += titleLen;
+
+          console.log('✅ Parsed Record:', {
+            id: `REC${record_id}`,
+            title,
+            description,
+            encryptedData,
+            createdAt,
+            accessGrantedTo: accessListLen,
+          });
+
+          parsedRecords.push({
+            id: `REC${record_id}`,
+            title,
+            description,
+            encryptedData,
+            createdAt,
+            accessGrantedTo: accessListLen,
+          });
+        } catch (err: any) {
+          console.error('❌ Failed to parse a record:', err?.message);
         }
-
-        console.log('📃 Parsed records:', parsedRecords);
-        // setRecords(parsedRecords);
-      } catch (err) {
-        console.error('Failed to fetch health records:', err);
-      } finally {
-        console.log('🔁 Done loading');
-        setLoading(false);
       }
-    };
 
+      console.log('📃 Parsed records:', parsedRecords);
+      setRecords(parsedRecords);
+    } catch (err) {
+      console.error('Failed to fetch health records:', err);
+    } finally {
+      console.log('🔁 Done loading');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchRecords();
   }, [publicKey]);
 
   const {authorizeSession} = useAuthorization();
 
   const registerOrganizationTransaction = useCallback(
-    async (name: string, contactInfo: string) => {
+    async (name: string, description: string, contactInfo: string) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
           const [authorizationResult, latestBlockhash] = await Promise.all([
@@ -382,6 +380,7 @@ const DashboardScreen = () => {
           const data = Buffer.concat([
             discriminator,
             encodeAnchorString(name),
+            encodeAnchorString(description),
             encodeAnchorString(contactInfo),
           ]);
           const keys = [
@@ -448,7 +447,7 @@ const DashboardScreen = () => {
   const onClickRegisterOrg = async () => {
     try {
       setRegisterOrganizationLoading(true);
-      await registerOrganizationTransaction(name, contactInfo);
+      await registerOrganizationTransaction(name, description, contactInfo);
       await fetchOrganization();
     } catch (err: any) {
     } finally {
@@ -456,8 +455,159 @@ const DashboardScreen = () => {
     }
   };
 
+  const handleDeleteRecord = async (recordId: string, title: string) => {
+    try {
+      setDeleteLoading(recordId);
+      await deleteRecordTransaction(recordId);
+    } catch (error) {
+      console.error('Delete failed:', error);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const confirmTransactionWithPolling = async (
+    txid,
+    commitment = 'confirmed',
+    timeout = 30000,
+  ) => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      try {
+        const status = await connection.getSignatureStatus(txid);
+
+        if (
+          status?.value?.confirmationStatus === commitment ||
+          status?.value?.confirmationStatus === 'finalized'
+        ) {
+          return status.value;
+        }
+
+        if (status?.value?.err) {
+          throw new Error(
+            `Transaction failed: ${JSON.stringify(status.value.err)}`,
+          );
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.log('Polling error:', error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  };
+
+  const deleteRecordTransaction = useCallback(
+    async (recordId: string) => {
+      return await transact(async (wallet: Web3MobileWallet) => {
+        try {
+          const [authorizationResult, latestBlockhash] = await Promise.all([
+            authorizeSession(wallet),
+            connection.getLatestBlockhash(),
+          ]);
+
+          const userPubkey = authorizationResult.publicKey;
+
+          const numericRecordId = parseInt(recordId.replace('REC', ''));
+
+          const recordIdBuffer = Buffer.alloc(8);
+          recordIdBuffer.writeBigUInt64LE(BigInt(numericRecordId), 0);
+
+          const [userVaultPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('user_vault'), userPubkey.toBuffer()],
+            PROGRAM_ID,
+          );
+
+          const [healthRecordPda] = PublicKey.findProgramAddressSync(
+            [
+              Buffer.from('health_record'),
+              userPubkey.toBuffer(),
+              recordIdBuffer,
+            ],
+            PROGRAM_ID,
+          );
+
+          // Fixed discriminator calculation
+          const discriminator = Buffer.from(
+            sha256.digest('global:deactivate_record'),
+          ).slice(0, 8);
+
+          const instructionData = Buffer.concat([
+            discriminator,
+            recordIdBuffer, // This is the _record_id parameter
+          ]);
+
+          // Accounts must match the order in your Rust struct
+          const keys = [
+            {pubkey: userVaultPda, isSigner: false, isWritable: true},
+            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+            {pubkey: userPubkey, isSigner: true, isWritable: true},
+          ];
+
+          const instruction = new TransactionInstruction({
+            keys,
+            programId: PROGRAM_ID,
+            data: instructionData,
+          });
+
+          const transaction = new Transaction({
+            ...latestBlockhash,
+            feePayer: userPubkey,
+          });
+
+          transaction.add(instruction);
+
+          const signedTxs = await wallet.signTransactions({
+            transactions: [transaction],
+          });
+
+          const txid = await connection.sendRawTransaction(
+            signedTxs[0].serialize(),
+            {
+              skipPreflight: false,
+              preflightCommitment: 'processed',
+            },
+          );
+
+          await confirmTransactionWithPolling(txid, 'confirmed');
+
+          toast.show({
+            type: 'success',
+            message: 'Record deleted successfully!',
+          });
+
+          await fetchRecords();
+
+          return signedTxs[0];
+        } catch (error: any) {
+          console.error('Delete record transaction error:', error);
+
+          let errorMessage = 'Failed to delete record';
+          if (error.message?.includes('UnauthorizedAccess')) {
+            errorMessage = 'You are not authorized to delete this record';
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+
+          toast.show({
+            type: 'error',
+            message: errorMessage,
+          });
+
+          throw error;
+        }
+      });
+    },
+    [authorizeSession, connection, toast],
+  );
+
   const renderItem = ({item}: {item: RecordType}) => (
-    <RecordCard record={item} navigate={navigate} />
+    <RecordCard
+      record={item}
+      navigate={navigate}
+      onDelete={handleDeleteRecord}
+    />
   );
 
   return (

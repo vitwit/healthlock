@@ -1,19 +1,25 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
-	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/spf13/cobra"
 	"github.com/vitwit/healthlock/tee-client/config"
 	"github.com/vitwit/healthlock/tee-client/keys"
@@ -22,6 +28,7 @@ import (
 	"github.com/vitwit/healthlock/tee-client/types"
 
 	solanago "github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 )
 
 var (
@@ -141,21 +148,26 @@ func startRESTServer(ctx *types.Context, cfg *config.Config, solClient *solana.C
 	http.HandleFunc("/upload-record", UploadRecordHandler(*ctx, solClient, keyPairs))
 
 	addr := ":" + strconv.Itoa(cfg.Rest.Port)
-	fmt.Printf("Starting REST server at http://localhost%s\n", addr)
+	fmt.Printf("Starting REST server at http://localhost%s\n", ":8085")
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatalf("Failed to start REST server: %v", err)
 	}
 }
 
 type DecryptRequest struct {
-	RecordOwner string `json:"record_owner"`
-	RecordID    uint64 `json:"record_id"`
-	Signer      string `json:"signer"`
-	Signature   string `json:"signature"`
+	CID       string `json:"cid"`       // IPFS CID of the encrypted JSON file
+	Signer    string `json:"signer"`    // Who is requesting
+	Signature string `json:"signature"` // Signed message
 }
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type FrontendEncryptedPayload struct {
+	EncryptedAESKey string `json:"encrypted_aes_key"`
+	Ciphertext      string `json:"ciphertext"`
+	Nonce           string `json:"nonce"`
 }
 
 func writeJSONError(w http.ResponseWriter, msg string, code int) {
@@ -164,8 +176,41 @@ func writeJSONError(w http.ResponseWriter, msg string, code int) {
 	_ = json.NewEncoder(w).Encode(ErrorResponse{Error: msg})
 }
 
+// detectFileType analyzes the first few bytes to determine file type
+func detectFileType(data []byte) string {
+	if len(data) < 8 {
+		return "unknown"
+	}
+
+	// PDF signature: %PDF
+	if len(data) >= 4 && data[0] == 0x25 && data[1] == 0x50 && data[2] == 0x44 && data[3] == 0x46 {
+		return "pdf"
+	}
+
+	// JPEG signatures: FF D8 FF
+	if len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+		return "jpeg"
+	}
+
+	// PNG signature: 89 50 4E 47 0D 0A 1A 0A
+	if len(data) >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+		data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A {
+		return "png"
+	}
+
+	// GIF signatures: GIF87a or GIF89a
+	if len(data) >= 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 {
+		return "gif"
+	}
+
+	// Default fallback
+	return "unknown"
+}
+
 func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair *keys.KeyPair) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("📩 Request incoming")
+
 		if r.Method != http.MethodPost {
 			writeJSONError(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
@@ -177,77 +222,127 @@ func DecryptAndServeHandler(ctx types.Context, solClient *solana.Client, keypair
 			return
 		}
 
-		// Parse pubkeys
-		recordOwnerPubkey, err := solanago.PublicKeyFromBase58(req.RecordOwner)
+		// Validate required fields
+		if req.CID == "" {
+			writeJSONError(w, "CID is required", http.StatusBadRequest)
+			return
+		}
+
+		// 🔄 Fetch encrypted JSON from IPFS
+		ipfsData, err := fetchFromIPFS(req.CID)
 		if err != nil {
-			writeJSONError(w, "Invalid record_owner pubkey", http.StatusBadRequest)
+			fmt.Printf("❌ Failed to fetch from IPFS: %v\n", err)
+			writeJSONError(w, "Failed to fetch file from IPFS", http.StatusBadGateway)
 			return
 		}
-		signerPubkey, err := solanago.PublicKeyFromBase58(req.Signer)
+
+		fmt.Printf("📦 Fetched %d bytes from IPFS\n", len(ipfsData))
+
+		// 🔓 Parse encrypted payload (matches your frontend format)
+		var enc FrontendEncryptedPayload
+		if err := json.Unmarshal(ipfsData, &enc); err != nil {
+			fmt.Printf("❌ Failed to parse encrypted payload: %v\n", err)
+			writeJSONError(w, "Invalid encrypted payload format", http.StatusBadRequest)
+			return
+		}
+
+		// Validate required fields in encrypted payload
+		if enc.EncryptedAESKey == "" || enc.Ciphertext == "" || enc.Nonce == "" {
+			writeJSONError(w, "Missing required fields in encrypted payload", http.StatusBadRequest)
+			return
+		}
+
+		// 🔓 Decode base64 values
+		encryptedAESKey, err := base64.StdEncoding.DecodeString(enc.EncryptedAESKey)
 		if err != nil {
-			writeJSONError(w, "Invalid signer pubkey", http.StatusBadRequest)
+			fmt.Printf("❌ Failed to decode encrypted AES key: %v\n", err)
+			writeJSONError(w, "Invalid base64: Encrypted AES key", http.StatusBadRequest)
 			return
 		}
 
-		// Construct and verify signature
-		message := fmt.Sprintf("record-access:%s:%s:%d", req.Signer, req.RecordOwner, req.RecordID)
-		sig, err := solanago.SignatureFromBase58(req.Signature)
+		ciphertext, err := base64.StdEncoding.DecodeString(enc.Ciphertext)
 		if err != nil {
-			writeJSONError(w, "Invalid signature", http.StatusBadRequest)
-			return
-		}
-		if !sig.Verify(signerPubkey, []byte(message)) {
-			writeJSONError(w, "Signature verification failed", http.StatusUnauthorized)
+			fmt.Printf("❌ Failed to decode ciphertext: %v\n", err)
+			writeJSONError(w, "Invalid base64: Ciphertext", http.StatusBadRequest)
 			return
 		}
 
-		// Read from Solana
-		record, err := solClient.ReadHealthRecord(ctx, recordOwnerPubkey, req.RecordID)
+		nonce, err := base64.StdEncoding.DecodeString(enc.Nonce)
 		if err != nil {
-			writeJSONError(w, "Failed to fetch health record", http.StatusInternalServerError)
+			fmt.Printf("❌ Failed to decode nonce: %v\n", err)
+			writeJSONError(w, "Invalid base64: Nonce", http.StatusBadRequest)
 			return
 		}
 
-		if !record.Owner.Equals(recordOwnerPubkey) {
-			authorized := false
-			for i := 0; i < len(record.AccessList); i++ {
-				if record.AccessList[i].Organization.Equals(signerPubkey) {
-					authorized = true
-					break
-				}
-			}
-
-			if !authorized {
-				writeJSONError(w, "Not authorized to view this document", http.StatusUnauthorized)
-				return
-			}
+		// Validate nonce length (AES-GCM standard is 12 bytes)
+		if len(nonce) != 12 {
+			fmt.Printf("❌ Invalid nonce length: got %d, expected 12\n", len(nonce))
+			writeJSONError(w, "Invalid nonce length (expected 12 bytes)", http.StatusBadRequest)
+			return
 		}
 
-		// Build file path: upload/<owner>/<checksum>
-		ownerAddress := recordOwnerPubkey.String()
-		filePath := filepath.Join("upload", ownerAddress, record.Checksum)
+		fmt.Printf("🔑 Decrypting AES key with RSA (key size: %d bytes)\n", len(encryptedAESKey))
 
-		// Read encrypted file from disk
-		encryptedData, err := os.ReadFile(filePath)
+		// 🔐 Decrypt AES key with RSA OAEP (SHA-256) - matches your Android code
+		aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, keypair.PrivateKey, encryptedAESKey, nil)
 		if err != nil {
-			writeJSONError(w, "Encrypted file not found", http.StatusNotFound)
+			fmt.Printf("❌ Failed to decrypt AES key: %v\n", err)
+			writeJSONError(w, "Failed to decrypt AES key", http.StatusUnauthorized)
 			return
 		}
 
-		// Decrypt
-		plaintext, err := keypair.DecryptFile(encryptedData)
+		fmt.Printf("🔓 AES key decrypted successfully (key length: %d bytes)\n", len(aesKey))
+
+		// 🔐 Decrypt ciphertext with AES-GCM
+		block, err := aes.NewCipher(aesKey)
 		if err != nil {
-			writeJSONError(w, "Decryption failed", http.StatusInternalServerError)
+			fmt.Printf("❌ Failed to create AES cipher: %v\n", err)
+			writeJSONError(w, "AES cipher init failed", http.StatusInternalServerError)
 			return
 		}
 
-		// Serve decrypted content
-		w.Header().Set("Content-Type", record.MimeType)
-		w.Header().Set("Content-Disposition", "inline")
+		aesgcm, err := cipher.NewGCM(block)
+		if err != nil {
+			fmt.Printf("❌ Failed to create AES-GCM: %v\n", err)
+			writeJSONError(w, "AES-GCM init failed", http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Printf("🔓 Decrypting %d bytes of ciphertext\n", len(ciphertext))
+
+		plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+		if err != nil {
+			fmt.Printf("❌ AES decryption failed: %v\n", err)
+			writeJSONError(w, "AES decryption failed - invalid data or key", http.StatusUnauthorized)
+			return
+		}
+
+		fmt.Printf("✅ Successfully decrypted %d bytes of data\n", len(plaintext))
+
+		// ✅ Detect file type from decrypted content for better client handling
+		fileType := detectFileType(plaintext)
+
+		// ✅ Serve decrypted data as base64 for React Native compatibility
+		base64Data := base64.StdEncoding.EncodeToString(plaintext)
+
+		// Set headers to indicate this is base64-encoded binary data with file type info
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"decrypted_file\"")
+		w.Header().Set("Content-Length", strconv.Itoa(len(base64Data)))
+		w.Header().Set("X-Original-Size", strconv.Itoa(len(plaintext)))
+		w.Header().Set("X-Detected-File-Type", fileType)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(plaintext)
+
+		bytesWritten, err := w.Write([]byte(base64Data))
+		if err != nil {
+			fmt.Printf("❌ Failed to write response: %v\n", err)
+			return
+		}
+
+		fmt.Printf("📤 Successfully served %d bytes (base64) to client, original size: %d bytes\n", bytesWritten, len(plaintext))
 	}
 }
+
 func UploadRecordHandler(ctx types.Context, solClient *solana.Client, keypair *keys.KeyPair) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -332,4 +427,37 @@ func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+func fetchFromIPFS(cid string) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Add the "arg" field like -F in curl
+	if err := writer.WriteField("arg", cid); err != nil {
+		return nil, fmt.Errorf("failed to write multipart field: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", "http://localhost:5001/api/v0/cat", &buf)
+	if err != nil {
+		return nil, fmt.Errorf("creating request failed: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from IPFS: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("IPFS server returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	return io.ReadAll(resp.Body)
 }

@@ -97,17 +97,17 @@ export class HealthLockClient {
 //     return registerOrgTx;
 //   }
 
-//   async fetchAllOrganizations() {
-//     const allOrganizations = await this.program.account.organization.all();
+  async fetchAllOrganizations() {
+    const allOrganizations = await this.program.account.organization.all();
     
-//     console.log(`\nTotal organizations registered: ${allOrganizations.length}`);
+    console.log(`\nTotal organizations registered: ${allOrganizations.length}`);
     
-//     console.log("\n🏥 All Registered Organizations:");
-//     console.log("==================================");
-//     allOrganizations.forEach((org, index) => {
-//       console.log(`\norganizations list ${JSON.stringify(org)}:`);
-//     });
-//   }
+    console.log("\n🏥 All Registered Organizations:");
+    console.log("==================================");
+    allOrganizations.forEach((org, index) => {
+      console.log(`\norganizations list ${JSON.stringify(org)}:`);
+    });
+  }
 
   async fetchAllRecords(authority: Keypair) {
     console.log("\n=== Fetching all the health records of a user ===");
@@ -149,11 +149,11 @@ async function main() {
   const platformWallet = authority;
   const creator = authority;
 
-  // try {
-  //   await client.initializeRecordCounter(authority);
-  // } catch (err) {
-  //   console.error('❌ Setup failed:', err);
-  // }
+  try {
+    await client.initializeRecordCounter(authority);
+  } catch (err) {
+    console.error('❌ Setup failed:', err);
+  }
 
   // try {
   //   await client.registerOrganization("test-organization", "guddu", authority);
@@ -161,17 +161,17 @@ async function main() {
   //   console.error('❌  organization Setup failed:', err);
   // }
 
-//   try {
-//     await client.fetchAllOrganizations();
-//   } catch (err) {
-//     console.error('❌  organization Setup failed:', err);
-//   }
+  // try {
+  //   await client.fetchAllOrganizations();
+  // } catch (err) {
+  //   console.error('❌  organization Setup failed:', err);
+  // }
 
-  try {
-    await client.fetchAllRecords(authority);
-  } catch (err) {
-    console.error('❌  organization Setup failed:', err);
-  }
+  // try {
+  //   await client.fetchAllRecords(authority);
+  // } catch (err) {
+  //   console.error('❌  organization Setup failed:', err);
+  // }
 }
 
 function sleep(ms) {

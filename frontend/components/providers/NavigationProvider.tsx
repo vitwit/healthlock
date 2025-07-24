@@ -1,5 +1,4 @@
-// components/providers/NavigationProvider.tsx
-import React, { createContext, useContext, useState } from 'react';
+import React, {createContext, useContext, useState} from 'react';
 
 type ScreenName =
   | 'ConnectWallet'
@@ -11,39 +10,62 @@ type ScreenName =
   | 'RegisterOrg'
   | 'ShareRecord';
 
+interface ScreenStackEntry {
+  name: ScreenName;
+  params?: Record<string, any>;
+}
+
 interface NavigationContextType {
   currentScreen: ScreenName;
-  navigate: (screen: ScreenName) => void; // Push new screen
-  goBack: () => void; // Pop the last screen
-  reset: (screen: ScreenName) => void; // Reset the stack to one screen
-  stack: ScreenName[]; // Expose stack if needed
+  currentParams?: Record<string, any>;
+  navigate: (screen: ScreenName, params?: Record<string, any>) => void;
+  goBack: () => void;
+  reset: (screen: ScreenName, params?: Record<string, any>) => void;
+  stack: ScreenStackEntry[];
   selectedRole: 'user' | 'organization';
   setSelectedRole: (role: 'user' | 'organization') => void;
 }
 
-const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
+const NavigationContext = createContext<NavigationContextType | undefined>(
+  undefined,
+);
 
-export const NavigationProvider = ({ children }: { children: React.ReactNode }) => {
-  const [stack, setStack] = useState<ScreenName[]>(['ConnectWallet']);
-  const [selectedRole, setSelectedRole] = useState<'user' | 'organization'>("user");
+export const NavigationProvider = ({children}: {children: React.ReactNode}) => {
+  const [stack, setStack] = useState<ScreenStackEntry[]>([
+    {name: 'ConnectWallet'},
+  ]);
+  const [selectedRole, setSelectedRole] = useState<'user' | 'organization'>(
+    'user',
+  );
 
-
-  const navigate = (screen: ScreenName) => {
-    setStack((prev: any) => [...prev, screen]);
+  const navigate = (screen: ScreenName, params?: Record<string, any>) => {
+    setStack(prev => [...prev, {name: screen, params}]);
   };
 
   const goBack = () => {
-    setStack((prev: any) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+    setStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev));
   };
 
-  const reset = (screen: ScreenName) => {
-    setStack([screen]);
+  const reset = (screen: ScreenName, params?: Record<string, any>) => {
+    setStack([{name: screen, params}]);
   };
 
-  const currentScreen = stack[stack.length - 1];
+  const currentEntry = stack[stack.length - 1];
+  const currentScreen = currentEntry.name;
+  const currentParams = currentEntry.params;
 
   return (
-    <NavigationContext.Provider value={{ currentScreen, navigate, goBack, reset, stack, selectedRole, setSelectedRole }}>
+    <NavigationContext.Provider
+      value={{
+        currentScreen,
+        currentParams,
+        navigate,
+        goBack,
+        reset,
+        stack,
+        selectedRole,
+        setSelectedRole,
+      }}>
       {children}
     </NavigationContext.Provider>
   );
@@ -51,6 +73,7 @@ export const NavigationProvider = ({ children }: { children: React.ReactNode }) 
 
 export const useNavigation = (): NavigationContextType => {
   const context = useContext(NavigationContext);
-  if (!context) throw new Error('useNavigation must be used within a NavigationProvider');
+  if (!context)
+    throw new Error('useNavigation must be used within a NavigationProvider');
   return context;
 };
