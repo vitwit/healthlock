@@ -6,6 +6,7 @@ use crate::{events::*, state::*, ANCHOR_DESCRIMINATOR_SIZE};
 pub fn register_organization(
     ctx: Context<RegisterOrganization>,
     name: String,
+    description: String,
     contact_info: String,
 ) -> Result<()> {
     let organization = &mut ctx.accounts.organization;
@@ -14,6 +15,7 @@ pub fn register_organization(
     organization.name = name;
 
     organization.contact_info = contact_info;
+    organization.description = description;
 
     organization.created_at = Clock::get()?.unix_timestamp;
 

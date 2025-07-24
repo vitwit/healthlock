@@ -97,40 +97,40 @@ export class HealthLockClient {
 //     return registerOrgTx;
 //   }
 
-//   async fetchAllOrganizations() {
-//     const allOrganizations = await this.program.account.organization.all();
+  async fetchAllOrganizations() {
+    const allOrganizations = await this.program.account.organization.all();
     
-//     console.log(`\nTotal organizations registered: ${allOrganizations.length}`);
+    console.log(`\nTotal organizations registered: ${allOrganizations.length}`);
     
-//     console.log("\n🏥 All Registered Organizations:");
-//     console.log("==================================");
-//     allOrganizations.forEach((org, index) => {
-//       console.log(`\norganizations list ${JSON.stringify(org)}:`);
-//     });
-//   }
+    console.log("\n🏥 All Registered Organizations:");
+    console.log("==================================");
+    allOrganizations.forEach((org, index) => {
+      console.log(`\norganizations list ${JSON.stringify(org)}:`);
+    });
+  }
 
-//   async fetchAllRecords(authority: Keypair) {
-//     console.log("\n=== Fetching all the health records of a user ===");
-//     const userHealthRecordsFiltered = await this.program.account.healthRecord.all([
-//       {
-//         memcmp: {
-//           offset: 8,
-//           bytes:"BR9X7amZQohw8qauDpzn4CzCdLxhk2zBhCRpV7YW7ikS",
-//         },
-//       },
-//     ]);
+  async fetchAllRecords(authority: Keypair) {
+    console.log("\n=== Fetching all the health records of a user ===");
+    const userHealthRecordsFiltered = await this.program.account.healthRecord.all([
+      {
+        memcmp: {
+          offset: 8,
+          bytes:"J4KG1GEthENbivCsZgJqa1SYMM2Sgpm8rcEVjy3Ka4ei",
+        },
+      },
+    ]);
 
-//     const allHealthRecords = userHealthRecordsFiltered.map(record => ({
-//       recordId: record.account.recordId.toNumber(),
-//       pda: record.publicKey,
-//       data: record.account
-//     }));
+    const allHealthRecords = userHealthRecordsFiltered.map(record => ({
+      recordId: record.account.recordId.toNumber(),
+      pda: record.publicKey,
+      data: record.account
+    }));
 
-//     allHealthRecords.forEach((record, index) => {
-//       console.log(`\nRecords list ${JSON.stringify(record)}:`);
-//     })
+    allHealthRecords.forEach((record, index) => {
+      console.log(`\nRecords list ${JSON.stringify(record)}:`);
+    })
 
-//   }
+  }
 }
 
 // ------------------------
@@ -161,17 +161,17 @@ async function main() {
   //   console.error('❌  organization Setup failed:', err);
   // }
 
-//   try {
-//     await client.fetchAllOrganizations();
-//   } catch (err) {
-//     console.error('❌  organization Setup failed:', err);
-//   }
+  // try {
+  //   await client.fetchAllOrganizations();
+  // } catch (err) {
+  //   console.error('❌  organization Setup failed:', err);
+  // }
 
-//   try {
-//     await client.fetchAllRecords(authority);
-//   } catch (err) {
-//     console.error('❌  organization Setup failed:', err);
-//   }
+  // try {
+  //   await client.fetchAllRecords(authority);
+  // } catch (err) {
+  //   console.error('❌  organization Setup failed:', err);
+  // }
 }
 
 function sleep(ms) {

@@ -11,6 +11,8 @@ import {
   Platform,
   NativeModules,
   ScrollView,
+  Alert,
+  Keyboard,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -33,6 +35,7 @@ import {encodeAnchorString} from './DashboardScreen';
 import {useToast} from '../components/providers/ToastContext';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
 import {sha256} from '@noble/hashes/sha256';
+import RNFS from 'react-native-fs';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   // Decode the PEM wrapper
@@ -48,6 +51,11 @@ interface RecordCounterData {
   recordId: number;
 }
 
+interface IPFSUploadResponse {
+  cid: string;
+  size: number;
+}
+
 type EncryptResult = {
   encrypted_aes_key: string;
   ciphertext: string;
@@ -55,14 +63,13 @@ type EncryptResult = {
 };
 
 const {Encryptor} = NativeModules;
-
 const UploadRecordScreen = () => {
   const {connection} = useConnection();
   const {navigate, goBack} = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
 
   const {teeState} = useTEEContext();
 
@@ -75,17 +82,59 @@ const UploadRecordScreen = () => {
     }
   }, [teeState]);
 
+  interface EncryptResult {
+    [key: string]: any;
+  }
+
+  const uploadToIPFS = async (enc: EncryptResult) => {
+    const url = 'https://40v82shj-5001.inc1.devtunnels.ms/api/v0/add';
+
+    const jsonData = enc;
+    const path = `${RNFS.TemporaryDirectoryPath}/data.json`;
+
+    try {
+      // Write file to temp storage
+      await RNFS.writeFile(path, JSON.stringify(jsonData), 'utf8');
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: `file://${path}`,
+        name: 'data.json',
+        type: 'application/json',
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      console.log('Upload response:', result);
+      return result.Hash;
+    } catch (error) {
+      console.error('Error uploading to IPFS:', error);
+      throw error;
+    }
+  };
+
   const [uploadHealthRecordLoading, setUploadHealthRecordLoading] =
     useState<boolean>(false);
   const handleUpload = async () => {
+    Keyboard.dismiss();
+    if (!teeState || !selectedFile) {
+      Alert.alert('Error', 'File not selected or failed to encrypt');
+      return;
+    }
     try {
       setUploadHealthRecordLoading(true);
       const base64DerKey = extractBase64FromPemWrappedKey(teeState?.pubkey);
       const enc: EncryptResult = await Encryptor.encryptFromUri(
-        selectedFile.uri,
+        selectedFile?.uri,
         base64DerKey,
       );
-      await uploadHealthRecordTransaction(enc, 'pdf', 5);
+      const cid = await uploadToIPFS(enc);
+      await uploadHealthRecordTransaction(cid, 'pdf', 5);
     } catch (e: any) {
       console.error('=========================', e);
     }
@@ -114,65 +163,168 @@ const UploadRecordScreen = () => {
     }
   };
 
+  const confirmTransactionWithPolling = async (
+    txid,
+    commitment = 'confirmed',
+    timeout = 30000,
+  ) => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      try {
+        const status = await connection.getSignatureStatus(txid);
+
+        if (
+          status?.value?.confirmationStatus === commitment ||
+          status?.value?.confirmationStatus === 'finalized'
+        ) {
+          return status.value;
+        }
+
+        if (status?.value?.err) {
+          throw new Error(
+            `Transaction failed: ${JSON.stringify(status.value.err)}`,
+          );
+        }
+
+        // Wait 1 second before next poll
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.log('Polling error:', error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    throw new Error('Transaction confirmation timeout');
+  };
+
   const toast = useToast();
   const {authorizeSession} = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
-    async (enc: EncryptResult, mimeType: string, size: number) => {
+    async (enc: string, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
         try {
-          console.log('11111111111111111111111111111');
           const [authorizationResult, latestBlockhash] = await Promise.all([
             authorizeSession(wallet),
             connection.getLatestBlockhash(),
           ]);
-          console.log('2222222222222222222222');
 
           const userPubkey = authorizationResult.publicKey;
 
-          const recordCounterPDA = getRecordCounterPDA();
+          const [recordCounterPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('record_counter')],
+            PROGRAM_ID,
+          );
+
+          const [userVaultPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('user_vault'), userPubkey.toBuffer()],
+            PROGRAM_ID,
+          );
+
+          // Get current record counter to determine the record ID that will be used
           const recordCounterAccount = await connection.getAccountInfo(
-            recordCounterPDA,
+            recordCounterPda,
           );
           if (!recordCounterAccount || !recordCounterAccount.data) {
             throw new Error(
-              'Record counter account not found or not initialized',
+              'Record counter account not found. Please initialize the system first.',
             );
           }
-          console.log('3333333333333333333333');
 
           const recordCounter = parseRecordCounter(recordCounterAccount.data);
+          if (!recordCounter) {
+            throw new Error('Failed to parse record counter data');
+          }
 
-          const recordIDBuffer = Buffer.from(
-            new BigUint64Array([BigInt(recordCounter.recordId)]).buffer,
-          );
+          const currentRecordId = recordCounter.recordId;
 
-          console.log('44444444444444444');
+          const recordIdBuffer = Buffer.alloc(8);
+          try {
+            recordIdBuffer.writeBigUInt64LE(BigInt(currentRecordId), 0);
+          } catch (error) {
+            console.log('writeBigUInt64LE failed, using fallback:', error);
+            // Fallback: write as two 32-bit integers (little endian)
+            const id = Number(currentRecordId);
+            recordIdBuffer.writeUInt32LE(id & 0xffffffff, 0); // Low 32 bits
+            recordIdBuffer.writeUInt32LE((id >>> 32) & 0xffffffff, 4); // High 32 bits
+          }
 
-          const [healthRecordPda] = await PublicKey.findProgramAddressSync(
+          const [healthRecordPda] = PublicKey.findProgramAddressSync(
             [
               Buffer.from('health_record'),
               userPubkey.toBuffer(),
-              recordIDBuffer,
+              recordIdBuffer,
             ],
             PROGRAM_ID,
           );
-          console.log('555555555555555555555555');
+
+          const testEncryptedData = enc; // Very short encrypted data
+          const testMimeType = mimeType; // Simple MIME type
+          const testFileSize = fileSize; // Small file size
+          const testDescription = description; // Short description
+          const testTitle = title; // Very short title
+
+          // Validate test data lengths (should all pass easily)
+          if (testEncryptedData.length > 1048) {
+            throw new Error('Encrypted data too large (max 1048 characters)');
+          }
+          if (testMimeType.length > 100) {
+            throw new Error('MIME type too long (max 100 characters)');
+          }
+          if (testDescription.length > 100) {
+            throw new Error('Description too long (max 100 characters)');
+          }
+          if (testTitle.length > 50) {
+            throw new Error('Title too long (max 50 characters)');
+          }
 
           const discriminator = Buffer.from(
             sha256('global:upload_health_record').slice(0, 8),
           );
 
-          const v1 = Buffer.from('fedgfhggfhg', 'utf-8');
-          const v2 = Buffer.from(mimeType, 'utf-8');
-          const v3 = Buffer.from(new BigUint64Array([BigInt(1)]).buffer);
-          const v4 = Buffer.from(description, 'utf-8');
-          const v5 = Buffer.from(title, 'utf-8');
+          const encryptedDataBytes = Buffer.from(testEncryptedData, 'utf-8');
+          const encryptedDataLengthBuffer = Buffer.alloc(4);
+          encryptedDataLengthBuffer.writeUInt32LE(encryptedDataBytes.length, 0);
 
-          const data = Buffer.concat([discriminator, v1, v2, v3, v4, v5]);
+          const mimeTypeBytes = Buffer.from(testMimeType, 'utf-8');
+          const mimeTypeLengthBuffer = Buffer.alloc(4);
+          mimeTypeLengthBuffer.writeUInt32LE(mimeTypeBytes.length, 0);
 
-          console.log('6666666666666666666666666666');
+          const fileSizeBuffer = Buffer.alloc(8);
+          fileSizeBuffer.writeBigUInt64LE(BigInt(testFileSize), 0);
 
+          const descriptionBytes = Buffer.from(testDescription, 'utf-8');
+          const descriptionLengthBuffer = Buffer.alloc(4);
+          descriptionLengthBuffer.writeUInt32LE(descriptionBytes.length, 0);
+
+          const titleBytes = Buffer.from(testTitle, 'utf-8');
+          const titleLengthBuffer = Buffer.alloc(4);
+          titleLengthBuffer.writeUInt32LE(titleBytes.length, 0);
+
+          // Combine all instruction data
+          const instructionData = Buffer.concat([
+            discriminator,
+            encryptedDataLengthBuffer,
+            encryptedDataBytes,
+            mimeTypeLengthBuffer,
+            mimeTypeBytes,
+            fileSizeBuffer,
+            descriptionLengthBuffer,
+            descriptionBytes,
+            titleLengthBuffer,
+            titleBytes,
+          ]);
+
+          console.log(
+            'Instruction data size:',
+            instructionData.length,
+            'bytes',
+          );
+
+          // Create instruction accounts matching your UploadHealthRecord struct order
           const keys = [
+            {pubkey: userVaultPda, isSigner: false, isWritable: true},
+            {pubkey: recordCounterPda, isSigner: false, isWritable: true},
             {pubkey: healthRecordPda, isSigner: false, isWritable: true},
             {pubkey: userPubkey, isSigner: true, isWritable: true},
             {
@@ -181,60 +333,125 @@ const UploadRecordScreen = () => {
               isWritable: false,
             },
           ];
-          console.log('777777777777777777777777');
 
-          const ix = new TransactionInstruction({
-            programId: PROGRAM_ID,
+          const instruction = new TransactionInstruction({
             keys,
-            data,
+            programId: PROGRAM_ID,
+            data: instructionData,
           });
-          console.log('88888888888888888888888888888');
 
-          const tx = new Transaction({
+          const transaction = new Transaction({
             ...latestBlockhash,
             feePayer: userPubkey,
           });
 
-          tx.add(ix);
-          console.log('999999999999999999999');
+          transaction.add(instruction);
 
-          const signedTxs = await wallet.signTransactions({transactions: [tx]});
+          const signedTxs = await wallet.signTransactions({
+            transactions: [transaction],
+          });
+
+          console.log('Form data....', title, description, {
+            recordId: currentRecordId,
+            title: testTitle,
+            description: testDescription,
+            mimeType: testMimeType,
+            fileSize: testFileSize,
+            healthRecordPda: healthRecordPda.toString(),
+          });
+
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
+            {
+              skipPreflight: false,
+              preflightCommitment: 'processed',
+            },
           );
-          console.log('99999999999999999999999');
 
-          await connection.confirmTransaction(txid, 'confirmed');
-          console.log('11010100111000000000000000');
+          console.log('txn111111');
+
+          // const confirmation = await connection.confirmTransaction(
+          //   {
+          //     signature: txid,
+          //     ...latestBlockhash,
+          //   },
+          //   'confirmed',
+          // );
+
+          await confirmTransactionWithPolling(txid, 'confirmed');
+
+          // if (confirmation.value.err) {
+          //   throw new Error(
+          //     `Transaction failed: ${JSON.stringify(confirmation.value.err)}`,
+          //   );
+          // }
+
+          console.log('Health record uploaded successfully:', {
+            txid,
+            recordId: currentRecordId,
+            title: testTitle,
+            description: testDescription,
+            mimeType: testMimeType,
+            fileSize: testFileSize,
+            healthRecordPda: healthRecordPda.toString(),
+          });
 
           toast.show({
             type: 'success',
-            message: `Successfully registered`,
+            message: `Health record "${testTitle}" uploaded successfully!`,
           });
 
-          return signedTxs[0];
+          setTimeout(() => {
+            goBack();
+          }, 2000);
+
+          return {
+            transaction: signedTxs[0],
+            txid,
+            recordId: currentRecordId,
+            healthRecordPda,
+          };
         } catch (error: any) {
-          console.log('error>>>>>>>>', error);
-          if (error && error.message) {
-            toast.show({
-              type: 'error',
-              message: error.message,
-            });
-          } else if (error.response) {
-            toast.show({
-              type: 'error',
-              message: JSON.stringify(error.response),
-            });
-          } else {
-            toast.show({
-              type: 'error',
-              message: ERR_UNKNOWN,
-            });
+          console.error('Upload health record transaction error:', error);
+
+          let errorMessage = 'Failed to upload health record';
+
+          if (error.message?.includes('Record counter account not found')) {
+            errorMessage = 'System not initialized. Please contact support.';
+          } else if (error.message?.includes('insufficient funds')) {
+            errorMessage = 'Insufficient SOL balance for transaction fees';
+          } else if (error.message?.includes('blockhash not found')) {
+            errorMessage = 'Network congestion. Please try again.';
+          } else if (
+            error.message?.includes('too large') ||
+            error.message?.includes('too long')
+          ) {
+            errorMessage = error.message;
+          } else if (error.message?.includes('already in use')) {
+            errorMessage = 'Account conflict. Please refresh and try again.';
+          } else if (error.logs) {
+            const anchorError = error.logs.find(
+              (log: string) =>
+                log.includes('AnchorError') ||
+                log.includes('Program log: Error:'),
+            );
+            if (anchorError) {
+              errorMessage = `Upload failed: ${anchorError}`;
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
           }
+
+          toast.show({
+            type: 'error',
+            message: errorMessage,
+          });
+
+          throw error;
         }
       });
     },
-    [authorizeSession, connection],
+    [authorizeSession, connection, toast, title, description],
   );
 
   const handleFileSelect = async () => {
@@ -283,7 +500,10 @@ const UploadRecordScreen = () => {
                 placeholder="Record Title"
                 placeholderTextColor="#aaa"
                 value={title}
-                onChangeText={setTitle}
+                onChangeText={text => {
+                  console.log('📥 Title input:', text);
+                  setTitle(text);
+                }}
               />
 
               <TextInput
@@ -387,7 +607,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 4,
-    fontWeight: 500,
+    // fontWeight: 500,
   },
   uploadSubText: {
     fontSize: 13,
