@@ -8,7 +8,7 @@ const ORGANIZATION_DISCRIMINATOR = Buffer.from([
     145, 38, 152, 251, 91, 57, 118, 160
 ]);
 
-interface Organization {
+export interface Organization {
     pubkey: string;
     owner: string;
     organizationId: string;

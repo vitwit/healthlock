@@ -1,24 +1,23 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   TextInput,
   ScrollView,
   ActivityIndicator,
   RefreshControl, // Add this import
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {useNavigation} from '../components/providers/NavigationProvider';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {useConnection} from '../components/providers/ConnectionProvider';
-import {PublicKey} from '@solana/web3.js';
-import {sha256} from 'js-sha256';
-import {ERR_UNKNOWN, PROGRAM_ID, TEE_STATE} from '../util/constants';
-import RecordCard, {RecordType} from '../components/RecordCard';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { PublicKey } from '@solana/web3.js';
+import { sha256 } from 'js-sha256';
+import { ERR_UNKNOWN, PROGRAM_ID } from '../util/constants';
+import RecordCard, { RecordType } from '../components/RecordCard';
 import bs58 from 'bs58';
 import {
   Transaction,
@@ -29,10 +28,13 @@ import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import {getOrganization, Organization} from '../api/organization';
-import {useToast} from '../components/providers/ToastContext';
-import {parseTEEState} from '../api/state';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
+import { getOrganization, Organization } from '../api/organization';
+import { useToast } from '../components/providers/ToastContext';
+import { parseTEEState } from '../api/state';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
+import ProfileCard from '../components/ProfileCard';
+import { shortenAddress } from '../util/address';
+import OrganizationRecordCard from '../components/OrganiaztionRecordCard';
 
 export function encodeAnchorString(str: string): Buffer {
   const strBuf = Buffer.from(str, 'utf8');
@@ -42,8 +44,8 @@ export function encodeAnchorString(str: string): Buffer {
 }
 
 const DashboardScreen = () => {
-  const {selectedAccount} = useAuthorization();
-  const {selectedRole} = useNavigation();
+  const { selectedAccount, deauthorizeSession } = useAuthorization();
+  const { selectedRole } = useNavigation();
 
   console.log('address>>>>>>>>>>>>>>.', selectedAccount?.publicKey.toBase58());
 
@@ -68,8 +70,8 @@ const DashboardScreen = () => {
   const [userRecordsLoading, setUserRecordsLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false); // Add refresh state
 
-  const {navigate, goBack} = useNavigation();
-  const {connection} = useConnection();
+  const { navigate, goBack, reset } = useNavigation();
+  const { connection } = useConnection();
   const [accessListLength, setaccessListLength] = useState<number>(0);
 
   const [publicKey, setPublicKey] = useState<PublicKey>();
@@ -79,15 +81,7 @@ const DashboardScreen = () => {
 
   const toast = useToast();
 
-  const getTEEStatePDA = (): PublicKey => {
-    const [teeStatePDA] = PublicKey.findProgramAddressSync(
-      [TEE_STATE],
-      PROGRAM_ID,
-    );
-    return teeStatePDA;
-  };
-
-  const {teeState, setTEEState} = useTEEContext();
+  const { teeState, setTEEState } = useTEEContext();
 
   function parseUserVault(data: Buffer) {
     let offset = 8;
@@ -115,13 +109,11 @@ const DashboardScreen = () => {
     try {
       setLoading(true);
       const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-        filters: [{dataSize: 1073}],
+        filters: [{ dataSize: 1073 }],
       });
 
-      console.log('Parsed TEE Node:', accounts);
       for (const account of accounts) {
         const parsed = parseTEEState(account.account.data);
-        console.log('Parsed TEE Node:', parsed);
         setTEEState({
           attestation: parsed.attestation,
           isInitialized: parsed.isInitialized,
@@ -142,18 +134,23 @@ const DashboardScreen = () => {
         });
       }
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-      }, 2_000);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!teeState)
       fetchTEEState()
-        .then(res => console.log('res =========>', res))
-        .catch(err => console.log('errr =======> ', err));
   }, []);
+
+
+  function getDiscriminator(name: string): Buffer {
+    const hash = sha256.digest(`account:${name}`);
+    return Buffer.from(hash).slice(0, 8);
+  }
+
+  const [organizationRecordsLoading, setOrganizationRecordsLoading] = useState<boolean>(false);
+
 
   const fetchOrganization = async () => {
     if (!publicKey) {
@@ -161,57 +158,35 @@ const DashboardScreen = () => {
       return;
     }
     try {
+      console.log("fetching organization")
       setOrganizationLoading(true);
       const result = await getOrganization(connection, publicKey);
       if (result && result.name.length > 0) {
         setOrganization(result);
         setRegisteredOrganization(true);
+
+        await getOrganizationRecords(result.recordIds)
       } else {
         setRegisteredOrganization(false);
       }
+      console.log("successfull fetched1")
     } catch (error: any) {
       if (error && error.message === 'Organization account not found') {
         setRegisteredOrganization(false);
       } else {
-        toast.show({type: 'error', message: error?.message || ERR_UNKNOWN});
+        toast.show({ type: 'error', message: error?.message || ERR_UNKNOWN });
       }
     } finally {
+      console.log("successfull fetched2")
       setOrganizationLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (isOrg) if (!publicKey) return;
-    fetchOrganization();
-  }, [isOrg, publicKey]);
 
-  function getDiscriminator(name: string): Buffer {
-    const hash = sha256.digest(`account:${name}`);
-    return Buffer.from(hash).slice(0, 8);
-  }
-
-  const fetchOrganizationRecords = async () => {
-    if (isUser) {
-      return;
-    }
-    let organizationData;
-    let accessRecords: string[] = [];
-
-    try {
-      // Fetch organization account
-      organizationData = await getOrganization(connection, publicKey);
-      accessRecords = organizationData.recordIds;
-      console.log('🏢 Fetched organization inline:', organizationData?.name);
-    } catch (error) {
-      console.log('👤 No organization found with ', publicKey.toBase58());
-      setRecords([]);
-      setLoading(false);
-      return;
-    }
-
+  const getOrganizationRecords = async (accessRecords: string[]) => {
     const recordIdSet = new Set(accessRecords);
-
     const discriminator = getDiscriminator('HealthRecord');
+    setOrganizationRecordsLoading(false);
     const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
       filters: [
         {
@@ -223,8 +198,6 @@ const DashboardScreen = () => {
       ],
     });
 
-    console.log('✅ All health record accounts found:', accounts.length);
-
     const parsedRecords: RecordType[] = [];
 
     for (const acc of accounts) {
@@ -233,7 +206,6 @@ const DashboardScreen = () => {
       let offset = 8;
 
       try {
-        console.log('📦 Record buffer length:', totalLength);
 
         const owner = new PublicKey(data.slice(offset, offset + 32));
         offset += 32;
@@ -243,7 +215,6 @@ const DashboardScreen = () => {
 
         // Check if this record_id is listed in organization's recordIds
         if (!recordIdSet.has(record_id.toString())) {
-          console.log('⛔ Not in organization.recordIds, skipping:', record_id);
           continue;
         }
 
@@ -255,7 +226,6 @@ const DashboardScreen = () => {
 
         const userVaultAccount = await connection.getAccountInfo(userVaultPda);
         if (!userVaultAccount) {
-          console.log('User vault not found for owner:', owner.toBase58());
           continue;
         }
 
@@ -263,7 +233,6 @@ const DashboardScreen = () => {
         const activeRecordIds = userVault.record_ids;
 
         if (!activeRecordIds.includes(record_id)) {
-          console.log('Record not active, skipping:', record_id);
           continue;
         }
 
@@ -290,20 +259,24 @@ const DashboardScreen = () => {
 
           const expectedAccessSize = accessListLen * (32 + 8);
           if (offset + expectedAccessSize > totalLength) {
-            console.warn('⚠️ Skipping corrupt access list');
             offset = accessListStart + 4;
             accessListLen = 0;
           } else {
             offset += expectedAccessSize;
           }
         } catch (e) {
-          console.warn('⚠️ Failed to read access list — skipping');
           offset = accessListStart + 4;
           accessListLen = 0;
         }
 
         const mimeLen = data.readUInt32LE(offset);
         offset += 4;
+        if (offset + mimeLen > totalLength) {
+          throw new Error('Meme string exceeds buffer');
+        }
+
+        const mimeType = data.slice(offset, offset + mimeLen).toString('utf-8');
+
         offset += mimeLen;
 
         const fileSize = Number(data.readBigUInt64LE(offset));
@@ -327,41 +300,38 @@ const DashboardScreen = () => {
         const title = data.slice(offset, offset + titleLen).toString('utf-8');
         offset += titleLen;
 
-        console.log('✅ Parsed Organization Record:', {
-          id: `REC${record_id}`,
-          title,
-          description,
-          owner: owner.toBase58(),
-          createdAt,
-          accessGrantedTo: accessListLen,
-        });
-
         parsedRecords.push({
-          id: `REC${record_id}`,
+          id: record_id,
           title,
           description,
           encryptedData,
           createdAt,
           accessGrantedTo: accessListLen,
           owner: owner.toBase58(),
+          mimeType: mimeType,
         });
       } catch (err: any) {
         console.error(
           '❌ Failed to parse an organization record:',
           err?.message,
         );
+      } finally {
+        setOrganizationRecordsLoading(false);
       }
+
+      setaccessListLength(parsedRecords.length);
+      setRecords(parsedRecords);
     }
-    console.log('📃 Parsed organization-owned records:', parsedRecords);
-    setaccessListLength(parsedRecords.length);
-    setRecords(parsedRecords);
-  };
+  }
 
   useEffect(() => {
     if (isOrg) {
-      fetchOrganizationRecords();
+      if (!publicKey) return;
+      fetchOrganization();
     }
-  }, [publicKey, isOrg]);
+  }, [isOrg, publicKey]);
+
+
 
   const fetchUserRecords = async () => {
     if (isOrg) {
@@ -473,6 +443,9 @@ const DashboardScreen = () => {
 
           const mimeLen = data.readUInt32LE(offset);
           offset += 4;
+
+          const mimeType = data.slice(offset, offset + mimeLen).toString('utf-8');
+
           offset += mimeLen;
 
           const fileSize = Number(data.readBigUInt64LE(offset));
@@ -512,6 +485,8 @@ const DashboardScreen = () => {
             encryptedData,
             createdAt,
             accessGrantedTo: accessListLen,
+            owner: owner.toBase58(),
+            mimeType: mimeType,
           });
         } catch (err: any) {
           console.error('❌ Failed to parse a record:', err?.message);
@@ -531,7 +506,7 @@ const DashboardScreen = () => {
       console.error('Failed to fetch health records:', err);
     } finally {
       console.log('🔁 Done loading');
-      setUserRecordsLoading(true);
+      setUserRecordsLoading(false);
     }
   };
 
@@ -549,9 +524,6 @@ const DashboardScreen = () => {
         await fetchUserRecords();
       } else if (isOrg) {
         await fetchOrganization();
-        if (registeredOrganization) {
-          await fetchOrganizationRecords();
-        }
       }
     } catch (error) {
       console.error('Refresh error:', error);
@@ -560,7 +532,7 @@ const DashboardScreen = () => {
     }
   }, [isUser, isOrg, registeredOrganization]);
 
-  const {authorizeSession} = useAuthorization();
+  const { authorizeSession } = useAuthorization();
 
   const registerOrganizationTransaction = useCallback(
     async (name: string, description: string, contactInfo: string) => {
@@ -589,8 +561,8 @@ const DashboardScreen = () => {
             encodeAnchorString(contactInfo),
           ]);
           const keys = [
-            {pubkey: organizationPDA, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: organizationPDA, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -611,7 +583,7 @@ const DashboardScreen = () => {
 
           tx.add(ix);
 
-          const signedTxs = await wallet.signTransactions({transactions: [tx]});
+          const signedTxs = await wallet.signTransactions({ transactions: [tx] });
           const txid = await connection.sendRawTransaction(
             signedTxs[0].serialize(),
           );
@@ -649,10 +621,18 @@ const DashboardScreen = () => {
 
   const [registerOrganizationLoading, setRegisterOrganizationLoading] =
     useState<boolean>(false);
+
   const onClickRegisterOrg = async () => {
+    if (name.trim().length <= 3 || description.trim().length <= 3 || contactInfo.trim().length <= 3) {
+      toast.show({
+        message: "Invalid input data",
+        type: "error"
+      })
+      return;
+    }
     try {
       setRegisterOrganizationLoading(true);
-      await registerOrganizationTransaction(name, description, contactInfo);
+      await registerOrganizationTransaction(name.trim(), description.trim(), contactInfo.trim());
       await fetchOrganization();
     } catch (err: any) {
     } finally {
@@ -672,7 +652,7 @@ const DashboardScreen = () => {
   };
 
   const confirmTransactionWithPolling = async (
-    txid,
+    txid: string,
     commitment = 'confirmed',
     timeout = 30000,
   ) => {
@@ -702,6 +682,23 @@ const DashboardScreen = () => {
       }
     }
   };
+
+
+  const handleDisconnect = () => {
+    const f = async () => {
+      try {
+        await transact(async wallet => {
+          deauthorizeSession(wallet);
+        });
+        reset('ConnectWallet');
+      } catch (err: any) {
+
+      }
+    }
+
+    f();
+  }
+
 
   const deleteRecordTransaction = useCallback(
     async (recordId: number) => {
@@ -743,9 +740,9 @@ const DashboardScreen = () => {
 
           // Accounts must match the order in your Rust struct
           const keys = [
-            {pubkey: userVaultPda, isSigner: false, isWritable: true},
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: userVaultPda, isSigner: false, isWritable: true },
+            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
           ];
 
           const instruction = new TransactionInstruction({
@@ -814,10 +811,28 @@ const DashboardScreen = () => {
     />
   );
 
+  const renderOrganizationItem = (item: RecordType) => (
+    <OrganizationRecordCard
+      record={item}
+      navigate={navigate}
+      onDelete={handleDeleteRecord}
+      key={item.id}
+    />
+  );
+
   return (
     <LinearGradient
       colors={['#001F3F', '#003366', '#001F3F']}
       style={styles.container}>
+      <View style={styles.navBar}>
+        <Text style={styles.navTitle}>HealthLock</Text>
+        <Icon
+          name="logout"
+          size={22}
+          color="#fff"
+          onPress={handleDisconnect} // define this function
+        />
+      </View>
       {loading ? (
         <View>
           <ActivityIndicator style={styles.loading} size="large" color="#fff" />
@@ -825,80 +840,75 @@ const DashboardScreen = () => {
         </View>
       ) : (
         <View style={styles.wrapper}>
-          <Text style={styles.heading}>
-            {isUser ? 'Your Records' : 'Organization Dashboard'}
-          </Text>
 
-          <View style={styles.statsContainer}>
-            {isUser ? (
-              <>
-                <StatCard
-                  title="Total Records"
-                  value={userRecordsCount}
-                  icon="folder"
+          {
+            (isOrg && !organizationLoading && !registeredOrganization) && (
+              <View style={styles.registrationForm}>
+                <Text style={styles.formHeading}>
+                  Your organization is not registered. Please create an
+                  account to continue using the application.
+                </Text>
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Name"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  maxLength={50}
+                  value={name}
+                  onChangeText={setName}
                 />
-                <StatCard
-                  title="Shared with Orgs"
-                  value={sharedRecordsCount}
-                  icon="share"
+                <TextInput
+                  style={styles.input}
+                  placeholder="Description"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  maxLength={100}
+                  value={description}
+                  onChangeText={setDescription}
                 />
-              </>
-            ) : (
-              <>
-                {registeredOrganization ? (
-                  <>
-                    <StatCard
-                      title="Records Accessed"
-                      value={accessListLength}
-                      icon="visibility"
-                    />
-                  </>
-                ) : (
-                  <View style={styles.registrationForm}>
-                    <Text style={styles.formHeading}>
-                      Your organization is not registered. Please create an
-                      account to continue using the application.
-                    </Text>
+                <TextInput
+                  style={styles.input}
+                  multiline={true}
+                  numberOfLines={3}
+                  placeholder="Contact Info"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  maxLength={255}
+                  value={contactInfo}
+                  onChangeText={setContactInfo}
+                />
 
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Name"
-                      placeholderTextColor="rgba(255,255,255,0.6)"
-                      maxLength={50}
-                      value={name}
-                      onChangeText={setName}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Description"
-                      placeholderTextColor="rgba(255,255,255,0.6)"
-                      maxLength={100}
-                      value={description}
-                      onChangeText={setDescription}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      multiline={true}
-                      numberOfLines={3}
-                      placeholder="Contact Info"
-                      placeholderTextColor="rgba(255,255,255,0.6)"
-                      maxLength={255}
-                      value={contactInfo}
-                      onChangeText={setContactInfo}
-                    />
+                <TouchableOpacity
+                  style={styles.registerButton}
+                  onPress={() => {
+                    onClickRegisterOrg();
+                  }}>
+                  <Text style={styles.registerButtonText}>Register</Text>
+                </TouchableOpacity>
+              </View>
 
-                    <TouchableOpacity
-                      style={styles.registerButton}
-                      onPress={() => {
-                        onClickRegisterOrg();
-                      }}>
-                      <Text style={styles.registerButtonText}>Register</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
+            )
+          }
+          {
+            (isUser || (isOrg && !organizationLoading && registeredOrganization)) &&
+            <View>
+              <ProfileCard
+                isUser={isUser}
+                name={isUser ? (publicKey ? shortenAddress(publicKey, 9) : "-") : organization?.name || "-"}
+                description={!isUser ? organization?.description : null}
+                contactInfo={!isUser ? organization?.contactInfo : null}
+                stats={
+                  isUser
+                    ? [
+                      { title: 'Total Records', value: userRecordsCount },
+                      { title: 'Shared Records', value: sharedRecordsCount },
+                    ]
+                    : [
+                      { title: 'Accessible Records', value: accessListLength },
+                    ]
+                }
+              />
+
+            </View>
+          }
 
           {/* Action Button */}
           {isUser && (
@@ -913,7 +923,40 @@ const DashboardScreen = () => {
           )}
 
           {/* Record List with RefreshControl */}
-          {(isUser || (registeredOrganization && isOrg)) && (
+          {
+            (isUser && !userRecordsLoading) && (
+              <ScrollView
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={['#004080']} // Android
+                    tintColor="#004080" // iOS
+                    title="Pull to refresh" // iOS
+                    titleColor="#fff" // iOS
+                  />
+                }>
+                <View style={styles.listContainer}>
+                  <Text style={styles.sectionHeading}>Records</Text>
+                  <View>{records.map(renderItem)}</View>
+                  <View>
+                    {records.length === 0 && !userRecordsLoading && (
+                      <Text
+                        style={{
+                          textAlign: 'center',
+                          fontSize: 16,
+                          color: '#fff',
+                          marginTop: 16,
+                        }}>
+                        No Records Found
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
+            )
+          }
+          {(isOrg && !organizationRecordsLoading && registeredOrganization) && (
             <ScrollView
               refreshControl={
                 <RefreshControl
@@ -927,9 +970,9 @@ const DashboardScreen = () => {
               }>
               <View style={styles.listContainer}>
                 <Text style={styles.sectionHeading}>Records</Text>
-                <View>{records.map(renderItem)}</View>
+                <View>{records.map(renderOrganizationItem)}</View>
                 <View>
-                  {records.length === 0 && userRecordsLoading && (
+                  {records.length === 0 && !organizationRecordsLoading && (
                     <Text
                       style={{
                         textAlign: 'center',
@@ -937,7 +980,7 @@ const DashboardScreen = () => {
                         color: '#fff',
                         marginTop: 16,
                       }}>
-                      No Records Found
+                      You don't have access to records
                     </Text>
                   )}
                 </View>
@@ -950,21 +993,6 @@ const DashboardScreen = () => {
   );
 };
 
-const StatCard = ({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: number;
-  icon: string;
-}) => (
-  <View style={styles.statCard}>
-    <Icon name={icon} size={30} color="#fff" />
-    <Text style={styles.statTitle}>{title}</Text>
-    <Text style={styles.statValue}>{value}</Text>
-  </View>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -973,7 +1001,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 16,
   },
   loading: {
     flex: 1,
@@ -995,6 +1023,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1058,7 +1093,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     borderRadius: 10,
-    marginBottom: 20,
+    marginTop: 24,
   },
   formHeading: {
     fontSize: 16,
@@ -1084,6 +1119,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 12,
   },
+  navBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 22,
+    paddingHorizontal: 22,
+  },
+
+  navTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+
 });
 
 export default DashboardScreen;

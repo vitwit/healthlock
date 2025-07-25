@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,20 +9,20 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {useNavigation} from '../components/providers/NavigationProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
 import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import {useToast} from '../components/providers/ToastContext';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {sha256} from 'js-sha256';
-import {PublicKey} from '@solana/web3.js';
-import {useConnection} from '../components/providers/ConnectionProvider';
+import { useToast } from '../components/providers/ToastContext';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { sha256 } from 'js-sha256';
+import { PublicKey } from '@solana/web3.js';
+import { useConnection } from '../components/providers/ConnectionProvider';
 import bs58 from 'bs58';
-import {Transaction, TransactionInstruction} from '@solana/web3.js';
-import {PROGRAM_ID} from '../util/constants';
-import {RecordType} from '../components/RecordCard';
+import { Transaction, TransactionInstruction } from '@solana/web3.js';
+import { PROGRAM_ID } from '../util/constants';
+import { RecordType } from '../components/RecordCard';
 
 type OrganizationType = {
   owner: PublicKey;
@@ -36,16 +36,16 @@ type OrganizationType = {
 
 const ShareRecordDialogScreen = () => {
   const toast = useToast();
-  const {selectedAccount} = useAuthorization();
-  const {connection} = useConnection();
+  const { selectedAccount } = useAuthorization();
+  const { connection } = useConnection();
   const [records, setRecords] = useState<RecordType[]>([]);
   const [organizationsWithAccess, setOrganizationsWithAccess] = useState<
     string[]
   >([]);
-  const {goBack, currentParams} = useNavigation();
-  const {authorizeSession} = useAuthorization();
+  const { goBack, currentParams } = useNavigation();
+  const { authorizeSession } = useAuthorization();
   const [organizations, setOrganizations] = useState<OrganizationType[]>([]);
-  const [selectedOrgs, setSelectedOrgs] = useState<{[key: string]: boolean}>({
+  const [selectedOrgs, setSelectedOrgs] = useState<{ [key: string]: boolean }>({
     org1: true,
     org2: false,
     org3: false,
@@ -55,7 +55,7 @@ const ShareRecordDialogScreen = () => {
   const [revokeAccessLoading, setRevokeAccessLoading] = useState<string | null>(
     null,
   );
-  const {accounts} = useAuthorization();
+  const { accounts } = useAuthorization();
   const [publicKey, setPublicKey] = useState<PublicKey>();
 
   useEffect(() => {
@@ -104,7 +104,7 @@ const ShareRecordDialogScreen = () => {
   }, []);
 
   const toggleOrg = (id: string) => {
-    setSelectedOrgs(prev => ({...prev, [id]: !prev[id]}));
+    setSelectedOrgs(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const organizationDiscriminator = Buffer.from(
@@ -184,7 +184,7 @@ const ShareRecordDialogScreen = () => {
       console.log(`Found ${accounts.length} organization accounts`);
 
       const organizations = accounts
-        .map(({account}) => {
+        .map(({ account }) => {
           try {
             const data = account.data.slice(8);
 
@@ -207,7 +207,7 @@ const ShareRecordDialogScreen = () => {
   };
 
   const confirmTransactionWithPolling = async (
-    txid,
+    txid: string,
     commitment = 'confirmed',
     timeout = 30000,
   ) => {
@@ -369,6 +369,7 @@ const ShareRecordDialogScreen = () => {
 
           const mimeLen = data.readUInt32LE(offset);
           offset += 4;
+          const mimeType = data.slice(offset, offset + mimeLen).toString('utf-8');
           offset += mimeLen;
 
           offset += 8;
@@ -407,6 +408,8 @@ const ShareRecordDialogScreen = () => {
             encryptedData,
             createdAt,
             accessGrantedTo: accessListLen,
+            owner: owner.toBase58(),
+            mimeType: mimeType,
           });
         } catch (err: any) {
           console.error('❌ Failed to parse a record:', err?.message);
@@ -469,9 +472,9 @@ const ShareRecordDialogScreen = () => {
 
           // Define account keys
           const keys = [
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: organizationPDA, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+            { pubkey: organizationPDA, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
           ];
 
           // Create transaction instruction
@@ -583,9 +586,9 @@ const ShareRecordDialogScreen = () => {
             ]);
 
             const keys = [
-              {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-              {pubkey: organizationPDA, isSigner: false, isWritable: true},
-              {pubkey: userPubkey, isSigner: true, isWritable: true},
+              { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+              { pubkey: organizationPDA, isSigner: false, isWritable: true },
+              { pubkey: userPubkey, isSigner: true, isWritable: true },
             ];
 
             const instruction = new TransactionInstruction({
@@ -661,7 +664,7 @@ const ShareRecordDialogScreen = () => {
 
       // Optionally update local state to remove the organization from selected orgs
       setSelectedOrgs(prev => {
-        const updated = {...prev};
+        const updated = { ...prev };
         delete updated[organizationPublicKey.toBase58()];
         return updated;
       });
@@ -709,7 +712,9 @@ const ShareRecordDialogScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
+      <LinearGradient
+        colors={['#001F3F', '#003366', '#001F3F']}
+        style={styles.gradient}>
         {/* Header */}
         <View style={styles.topBar}>
           <TouchableOpacity onPress={goBack} style={styles.backButton}>
@@ -720,7 +725,7 @@ const ShareRecordDialogScreen = () => {
 
         {/* Record Info */}
         <View style={styles.recordBox}>
-          <Text style={styles.recordTitle}>📄 Blood Test Results</Text>
+          <Text style={styles.recordTitle}>{currentParams?.record?.title}</Text>
         </View>
 
         <ScrollView contentContainerStyle={styles.orgList}>
@@ -762,7 +767,7 @@ const ShareRecordDialogScreen = () => {
           onPress={() => {
             handleShare();
           }}>
-          <Text style={styles.shareButtonText}>🔗 Share To Selected Orgs</Text>
+          <Text style={styles.shareButtonText}>Grant Access</Text>
         </TouchableOpacity>
       </LinearGradient>
     </SafeAreaView>
@@ -804,17 +809,15 @@ const styles = StyleSheet.create({
   orgList: {
     paddingBottom: 20,
   },
-  // orgRow: {
-  //   flexDirection: 'row',
-  //   alignItems: 'flex-start',
-  //   marginBottom: 16,
-  // },
   orgRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
     width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 8,
+    borderRadius: 8
   },
   orgInfo: {
     flexDirection: 'row',
@@ -836,11 +839,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
   shareButton: {
-    backgroundColor: 'white',
-    padding: 14,
-    borderRadius: 10,
+    flexDirection: 'row',
+    backgroundColor: '#004080',
+    borderRadius: 8,
+    padding: 12,
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   revokeButton: {
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -860,7 +865,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   shareButtonText: {
-    color: '#764BA2',
+    color: '#fff',
     fontWeight: '600',
     fontSize: 16,
   },
