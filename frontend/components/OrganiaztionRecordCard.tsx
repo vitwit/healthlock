@@ -1,7 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
-import FileViewer from 'react-native-file-viewer';
 import { Alert } from 'react-native';
 import bs58 from 'bs58';
 import { useAuthorization } from './providers/AuthorizationProvider';
@@ -11,8 +10,8 @@ import { shortenAddress } from '../util/address';
 import { PublicKey } from '@solana/web3.js';
 import Share from 'react-native-share';
 
-
 import { PermissionsAndroid, Platform } from 'react-native';
+import { Buffer } from 'buffer';
 
 /**
  * Saves a base64-encoded file to the Android public Downloads directory.
