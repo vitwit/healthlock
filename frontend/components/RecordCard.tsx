@@ -16,6 +16,7 @@ export type RecordType = {
   accessGrantedTo: number;
   encryptedData: string;
   owner: string;
+  mimeType: string;
 };
 
 const RecordCard = ({
