@@ -39,9 +39,14 @@ export const saveFileToDownloads = async (
     // Full path to the Downloads directory
     const downloadsPath = `${RNFS.DownloadDirectoryPath}/${fileName}`;
 
+    // ✅ Check if file already exists
+    const fileExists = await RNFS.exists(downloadsPath);
+    if (fileExists) {
+      return downloadsPath;
+    }
+
     // Write the file using base64 encoding
     await RNFS.writeFile(downloadsPath, base64Data, 'base64');
-    console.log('✅ File saved to:', downloadsPath);
 
     return downloadsPath;
   } catch (error: unknown) {
@@ -49,6 +54,7 @@ export const saveFileToDownloads = async (
     throw error instanceof Error ? error : new Error('Unknown error');
   }
 };
+
 
 
 export type OrganizationRecordType = {
@@ -143,13 +149,6 @@ const OrganizationRecordCard = ({
       try {
 
         const savedPath = await saveFileToDownloads(base64Data, fileName);
-
-        // await Share.open({
-        //   url: savedPath,
-        //   type: record.mimeType,
-        //   showAppsToView: true,
-
-        // });
 
         toast.show({
           message: `File saved to ${savedPath}`,
