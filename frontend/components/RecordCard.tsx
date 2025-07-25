@@ -5,10 +5,10 @@ import { Alert } from 'react-native';
 import bs58 from 'bs58';
 import { useAuthorization } from './providers/AuthorizationProvider';
 import { useSolanaMessageSigner } from '../hooks/useSignMessage';
-import { REST_ENDPOINT } from '../util/constants';
+import { ERR_UNKNOWN, REST_ENDPOINT } from '../util/constants';
 import { Buffer } from 'buffer';
 import { saveFileToDownloads } from './OrganiaztionRecordCard';
-import Share from 'react-native-share';
+import { useToast } from './providers/ToastContext';
 
 export type RecordType = {
   id: number;
@@ -33,6 +33,8 @@ const RecordCard = ({
   const formattedDate = new Date(record.createdAt * 1000).toLocaleDateString();
   const { signMessage } = useSolanaMessageSigner();
   const { selectedAccount } = useAuthorization();
+
+  const toast = useToast();
 
   const onViewRecord = async () => {
     try {
@@ -100,7 +102,6 @@ const RecordCard = ({
 
       const extension = mimeTypeToExtension[record.mimeType] || "png";
       // Create a unique filename
-      const timestamp = Date.now();
       const sanitizedTitle = record.title.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${sanitizedTitle}_${recordID}.${extension}`;
       const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
@@ -111,15 +112,22 @@ const RecordCard = ({
 
         const savedPath = await saveFileToDownloads(base64Data, fileName);
 
-        await Share.open({
-          url: savedPath,
-          type: record.mimeType,
-          showAppsToView: true,
+        // await Share.open({
+        //   url: savedPath,
+        //   type: record.mimeType,
+        //   showAppsToView: true,
 
-        });
+        // });
+        toast.show({
+          message: `File saved to ${savedPath}`,
+          type: "success"
+        })
 
-      } catch (err) {
-        console.error('❌ Could not open file:', err);
+      } catch (err: any) {
+        toast.show({
+          message: `Failed to save: ${err?.message ||  ERR_UNKNOWN}`,
+          type: "error"
+        })
       }
 
     } catch (err: any) {
