@@ -1,18 +1,17 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
-import FileViewer from 'react-native-file-viewer';
 import { Alert } from 'react-native';
 import bs58 from 'bs58';
 import { useAuthorization } from './providers/AuthorizationProvider';
 import { useSolanaMessageSigner } from '../hooks/useSignMessage';
-import { REST_ENDPOINT } from '../util/constants';
+import { ERR_UNKNOWN, REST_ENDPOINT } from '../util/constants';
 import { shortenAddress } from '../util/address';
 import { PublicKey } from '@solana/web3.js';
-import Share from 'react-native-share';
-
 
 import { PermissionsAndroid, Platform } from 'react-native';
+import { Buffer } from 'buffer';
+import { useToast } from './providers/ToastContext';
 
 /**
  * Saves a base64-encoded file to the Android public Downloads directory.
@@ -80,10 +79,9 @@ const OrganizationRecordCard = ({
 
   const onViewRecord = async () => {
     try {
-      console.log('🚀 Starting record download process...');
-
       const signer = selectedAccount?.publicKey?.toBase58();
       const recordID = record.id;
+      const toast = useToast();
 
       if (!signer) {
         throw new Error('Missing signer public key');
@@ -91,12 +89,9 @@ const OrganizationRecordCard = ({
 
       // Create signature message
       const message = `record-access:${selectedAccount?.publicKey?.toBase58()}:${record.owner}:${recordID}`;
-      console.log('📝 Signing message:', message);
 
       const signatureBytes = await signMessage(message);
       const signature = bs58.encode(signatureBytes);
-
-      console.log('📤 Sending download request...');
 
       // Send request to backend with specific options for React Native
       const response = await fetch(REST_ENDPOINT, {
@@ -113,17 +108,13 @@ const OrganizationRecordCard = ({
         }),
       });
 
-      console.log('📥 Response status:', response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Server error:', errorText);
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
 
       // Read the binary data as base64 directly from React Native fetch
       const base64Data = await response.text();
-      console.log('📦 Downloaded base64 data length:', base64Data.length);
 
       if (!base64Data || base64Data.length === 0) {
         throw new Error('Downloaded file is empty');
@@ -144,26 +135,30 @@ const OrganizationRecordCard = ({
 
       const extension = mimeTypeToExtension[record.mimeType] || "png";
       // Create a unique filename
-      const timestamp = Date.now();
       const sanitizedTitle = record.title.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${sanitizedTitle}_${recordID}.${extension}`;
-      const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
-
-      console.log('💾 Saving file to:', filePath);
 
       try {
 
         const savedPath = await saveFileToDownloads(base64Data, fileName);
 
-        await Share.open({
-          url: savedPath,
-          type: record.mimeType,
-          showAppsToView: true,
+        // await Share.open({
+        //   url: savedPath,
+        //   type: record.mimeType,
+        //   showAppsToView: true,
 
-        });
+        // });
 
-      } catch (err) {
-        console.error('❌ Could not open file:', err);
+        toast.show({
+          message: `File saved to ${savedPath}`,
+          type: "success"
+        })
+
+      } catch (err: any) {
+        toast.show({
+          message: `Failed to save: ${err?.message || ERR_UNKNOWN}`,
+          type: "error"
+        })
       }
 
     } catch (err: any) {

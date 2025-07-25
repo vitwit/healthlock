@@ -1,12 +1,14 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
-import FileViewer from 'react-native-file-viewer';
 import { Alert } from 'react-native';
 import bs58 from 'bs58';
 import { useAuthorization } from './providers/AuthorizationProvider';
 import { useSolanaMessageSigner } from '../hooks/useSignMessage';
-import { REST_ENDPOINT } from '../util/constants';
+import { ERR_UNKNOWN, REST_ENDPOINT } from '../util/constants';
+import { Buffer } from 'buffer';
+import { saveFileToDownloads } from './OrganiaztionRecordCard';
+import { useToast } from './providers/ToastContext';
 
 export type RecordType = {
   id: number;
@@ -32,9 +34,9 @@ const RecordCard = ({
   const { signMessage } = useSolanaMessageSigner();
   const { selectedAccount } = useAuthorization();
 
-  console.log(record);
+  const toast = useToast();
 
-  const onViewRecord = async (record: RecordType) => {
+  const onViewRecord = async () => {
     try {
       console.log('🚀 Starting record download process...');
 
@@ -85,157 +87,49 @@ const RecordCard = ({
         throw new Error('Downloaded file is empty');
       }
 
-      // Get server-detected file type if available
-      const serverDetectedType = response.headers.get('X-Detected-File-Type');
+      const decodedBytes = Buffer.from(base64Data, 'base64');
 
-      // Enhanced file type detection function
-      const detectFileTypeAndExtension = (
-        base64Data: string,
-        fileName: string = '',
-        serverType: string = '',
-      ) => {
-        // Use server detection first if available
-        if (serverType && serverType !== 'unknown') {
-          const typeMap: { [key: string]: { type: string; mimeType: string } } = {
-            pdf: { type: 'pdf', mimeType: 'application/pdf' },
-            jpeg: { type: 'jpg', mimeType: 'image/jpeg' },
-            png: { type: 'png', mimeType: 'image/png' },
-            gif: { type: 'gif', mimeType: 'image/gif' },
-          };
+      // Preview first few bytes for file type detection
+      console.log('🔍 First bytes:', decodedBytes.slice(0, 4));
 
-          if (typeMap[serverType]) {
-            return typeMap[serverType];
-          }
-        }
-
-        // Check magic bytes from base64 data to detect actual file type
-        const detectFromMagicBytes = (data: string) => {
-          try {
-            const firstBytes = atob(data.substring(0, 40)); // Decode first ~30 bytes
-            const bytes = Array.from(firstBytes).map(char =>
-              char.charCodeAt(0),
-            );
-
-            // PDF signature: %PDF
-            if (
-              bytes[0] === 0x25 &&
-              bytes[1] === 0x50 &&
-              bytes[2] === 0x44 &&
-              bytes[3] === 0x46
-            ) {
-              return { type: 'pdf', mimeType: 'application/pdf' };
-            }
-
-            // JPEG signatures: FF D8 FF
-            if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-              return { type: 'jpg', mimeType: 'image/jpeg' };
-            }
-
-            // PNG signature: 89 50 4E 47 0D 0A 1A 0A
-            if (
-              bytes[0] === 0x89 &&
-              bytes[1] === 0x50 &&
-              bytes[2] === 0x4e &&
-              bytes[3] === 0x47
-            ) {
-              return { type: 'png', mimeType: 'image/png' };
-            }
-
-            // GIF signatures: GIF87a or GIF89a
-            if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
-              return { type: 'gif', mimeType: 'image/gif' };
-            }
-          } catch (e) {
-            console.log('Could not detect file type from magic bytes');
-          }
-          return null;
-        };
-
-        // Try to detect from magic bytes
-        const magicDetection = detectFromMagicBytes(base64Data);
-        if (magicDetection) {
-          return magicDetection;
-        }
-
-        // Fallback to filename extension
-        if (fileName) {
-          const ext = fileName.toLowerCase().split('.').pop();
-          switch (ext) {
-            case 'pdf':
-              return { type: 'pdf', mimeType: 'application/pdf' };
-            case 'jpg':
-            case 'jpeg':
-              return { type: 'jpg', mimeType: 'image/jpeg' };
-            case 'png':
-              return { type: 'png', mimeType: 'image/png' };
-            case 'gif':
-              return { type: 'gif', mimeType: 'image/gif' };
-            case 'txt':
-              return { type: 'txt', mimeType: 'text/plain' };
-            case 'doc':
-              return { type: 'doc', mimeType: 'application/msword' };
-            case 'docx':
-              return {
-                type: 'docx',
-                mimeType:
-                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              };
-            default:
-              break;
-          }
-        }
-
-        // Default to PDF for medical records
-        return { type: 'pdf', mimeType: 'application/pdf' };
+      const mimeTypeToExtension: { [mimeType: string]: string } = {
+        'application/pdf': 'pdf',
+        'image/png': 'png',
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg', // Not standard, but included for completeness
       };
 
-      let fileInfo = detectFileTypeAndExtension(
-        base64Data,
-        record.title,
-        serverDetectedType || '',
-      );
-      const extension = fileInfo.type;
-      const detectedMimeType = fileInfo.mimeType;
 
-      console.log(
-        '📄 Server detected type:',
-        serverDetectedType,
-        'Final type:',
-        extension,
-        'MIME type:',
-        detectedMimeType,
-      );
-
+      const extension = mimeTypeToExtension[record.mimeType] || "png";
       // Create a unique filename
-      const timestamp = Date.now();
       const sanitizedTitle = record.title.replace(/[^a-zA-Z0-9]/g, '_');
-      const fileName = `${sanitizedTitle}_${recordID}_${timestamp}.${extension}`;
+      const fileName = `${sanitizedTitle}_${recordID}.${extension}`;
       const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
       console.log('💾 Saving file to:', filePath);
 
-      // Write file to device storage using base64 data directly
-      await RNFS.writeFile(filePath, base64Data, 'base64');
+      try {
 
-      console.log('✅ File saved successfully');
+        const savedPath = await saveFileToDownloads(base64Data, fileName);
 
-      // Verify file was written
-      const fileExists = await RNFS.exists(filePath);
-      if (!fileExists) {
-        throw new Error('Failed to save file to device');
+        // await Share.open({
+        //   url: savedPath,
+        //   type: record.mimeType,
+        //   showAppsToView: true,
+
+        // });
+        toast.show({
+          message: `File saved to ${savedPath}`,
+          type: "success"
+        })
+
+      } catch (err: any) {
+        toast.show({
+          message: `Failed to save: ${err?.message ||  ERR_UNKNOWN}`,
+          type: "error"
+        })
       }
 
-      // fileInfo = await RNFS.stat(filePath);
-      // console.log('📊 File info:', {
-      //   size: fileInfo.size,
-      //   path: fileInfo.path,
-      // });
-
-      // Open the file
-      await FileViewer.open(filePath, {
-        showOpenWithDialog: true,
-        showAppsSuggestions: true,
-      });
     } catch (err: any) {
       console.error('❌ Error in onViewRecord:', err);
 
@@ -262,7 +156,7 @@ const RecordCard = ({
         { text: 'OK' },
         {
           text: 'Retry',
-          onPress: () => onViewRecord(record),
+          onPress: () => onViewRecord(),
         },
       ]);
     }
@@ -287,7 +181,7 @@ const RecordCard = ({
       <View style={styles.buttonRow}>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => onViewRecord(record)}>
+          onPress={() => onViewRecord()}>
           <Icon name="visibility" size={16} color="#fff" />
           <Text style={styles.buttonText}>View</Text>
         </TouchableOpacity>

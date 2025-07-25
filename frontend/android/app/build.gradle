@@ -93,9 +93,9 @@ android {
 
     compileSdkVersion rootProject.ext.compileSdkVersion
 
-    namespace "com.frontend"
+    namespace "com.healthlock.app"
     defaultConfig {
-        applicationId "com.frontend"
+        applicationId "com.healthlock.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
