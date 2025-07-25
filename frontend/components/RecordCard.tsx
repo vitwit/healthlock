@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
 import { Alert } from 'react-native';
@@ -9,6 +9,7 @@ import { ERR_UNKNOWN, REST_ENDPOINT } from '../util/constants';
 import { Buffer } from 'buffer';
 import { saveFileToDownloads } from './OrganiaztionRecordCard';
 import { useToast } from './providers/ToastContext';
+import { useState } from 'react';
 
 export type RecordType = {
   id: number;
@@ -36,8 +37,10 @@ const RecordCard = ({
 
   const toast = useToast();
 
+  const [viewLoading, setViewLoading] = useState<boolean>(false);
   const onViewRecord = async () => {
     try {
+      setViewLoading(true);
       console.log('🚀 Starting record download process...');
 
       const signer = selectedAccount?.publicKey?.toBase58();
@@ -125,7 +128,7 @@ const RecordCard = ({
 
       } catch (err: any) {
         toast.show({
-          message: `Failed to save: ${err?.message ||  ERR_UNKNOWN}`,
+          message: `Failed to save: ${err?.message || ERR_UNKNOWN}`,
           type: "error"
         })
       }
@@ -159,6 +162,8 @@ const RecordCard = ({
           onPress: () => onViewRecord(),
         },
       ]);
+    } finally {
+      setViewLoading(false);
     }
   };
 
@@ -181,10 +186,19 @@ const RecordCard = ({
       <View style={styles.buttonRow}>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => onViewRecord()}>
-          <Icon name="visibility" size={16} color="#fff" />
-          <Text style={styles.buttonText}>View</Text>
+          onPress={() => !viewLoading && onViewRecord()}
+          disabled={viewLoading}
+        >
+          {viewLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Icon name="visibility" size={16} color="#fff" />
+              <Text style={styles.buttonText}>View</Text>
+            </>
+          )}
         </TouchableOpacity>
+
 
         <TouchableOpacity
           style={styles.button}

@@ -209,7 +209,7 @@ const ShareRecordDialogScreen = () => {
   const confirmTransactionWithPolling = async (
     txid: string,
     commitment = 'confirmed',
-    timeout = 30000,
+    timeout = 60000,
   ) => {
     const start = Date.now();
 
@@ -505,7 +505,7 @@ const ShareRecordDialogScreen = () => {
             },
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -612,7 +612,7 @@ const ShareRecordDialogScreen = () => {
             },
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',

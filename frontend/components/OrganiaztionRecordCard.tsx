@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
 import { Alert } from 'react-native';
@@ -12,6 +12,7 @@ import { PublicKey } from '@solana/web3.js';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
 import { useToast } from './providers/ToastContext';
+import { useState } from 'react';
 
 /**
  * Saves a base64-encoded file to the Android public Downloads directory.
@@ -72,16 +73,17 @@ const OrganizationRecordCard = ({
   onDelete: (recordId: number, title: string) => void;
 }) => {
 
-  console.log(record)
   const formattedDate = new Date(record.createdAt * 1000).toLocaleDateString();
   const { signMessage } = useSolanaMessageSigner();
   const { selectedAccount } = useAuthorization();
 
+  const [viewLoading, setViewLoading] = useState<boolean>(false);
+  const toast = useToast();
   const onViewRecord = async () => {
     try {
+      setViewLoading(true);
       const signer = selectedAccount?.publicKey?.toBase58();
       const recordID = record.id;
-      const toast = useToast();
 
       if (!signer) {
         throw new Error('Missing signer public key');
@@ -190,6 +192,8 @@ const OrganizationRecordCard = ({
           onPress: () => onViewRecord(),
         },
       ]);
+    } finally {
+      setViewLoading(false);
     }
   };
 
@@ -218,11 +222,19 @@ const OrganizationRecordCard = ({
       <View style={styles.buttonRow}>
         <TouchableOpacity
           style={styles.button}
-          onPress={onViewRecord}
+          onPress={() => !viewLoading && onViewRecord()}
+          disabled={viewLoading}
         >
-          <Icon name="visibility" size={16} color="#fff" />
-          <Text style={styles.buttonText}>View</Text>
+          {viewLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Icon name="visibility" size={16} color="#fff" />
+              <Text style={styles.buttonText}>View</Text>
+            </>
+          )}
         </TouchableOpacity>
+
       </View>
     </View>
   );
