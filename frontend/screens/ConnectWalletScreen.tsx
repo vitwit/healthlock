@@ -27,7 +27,7 @@ const ConnectWalletScreen: React.FC = () => {
       style={styles.container}>
       <View style={styles.wrapper}>
         <Text style={styles.heading}>Welcome to HealthLock</Text>
-        <Text style={styles.subheading}>Choose your role to get started</Text>
+        <Text style={styles.subheading}>Register as User or Organization</Text>
 
         <View style={styles.cardContainer}>
           <>

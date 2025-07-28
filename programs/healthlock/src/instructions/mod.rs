@@ -21,6 +21,3 @@ pub use register_organization::*;
 
 pub mod register_tee;
 pub use register_tee::*;
-
-pub mod register_user;
-pub use register_user::*;

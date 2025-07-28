@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,8 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DocumentPicker from 'react-native-document-picker';
-import { useNavigation } from '../components/providers/NavigationProvider';
-import { useTEEContext } from '../components/providers/TEEStateProvider';
+import {useNavigation} from '../components/providers/NavigationProvider';
+import {useTEEContext} from '../components/providers/TEEStateProvider';
 import {
   transact,
   Web3MobileWallet,
@@ -28,12 +28,12 @@ import {
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { PROGRAM_ID } from '../util/constants';
-import { useConnection } from '../components/providers/ConnectionProvider';
-import { useToast } from '../components/providers/ToastContext';
-import { useAuthorization } from '../components/providers/AuthorizationProvider';
-import { sha256 } from '@noble/hashes/sha256';
-import { uploadJsonToPinata } from '../util/ipfs';
+import {PROGRAM_ID} from '../util/constants';
+import {useConnection} from '../components/providers/ConnectionProvider';
+import {useToast} from '../components/providers/ToastContext';
+import {useAuthorization} from '../components/providers/AuthorizationProvider';
+import {sha256} from '@noble/hashes/sha256';
+import {uploadJsonToPinata} from '../util/ipfs';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
@@ -47,16 +47,17 @@ interface RecordCounterData {
   recordId: number;
 }
 
-const { Encryptor } = NativeModules;
+const {Encryptor} = NativeModules;
+
 const UploadRecordScreen = () => {
-  const { connection } = useConnection();
-  const { navigate, goBack } = useNavigation();
+  const {connection} = useConnection();
+  const {navigate, goBack} = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<any>(null);
 
-  const { teeState } = useTEEContext();
+  const {teeState} = useTEEContext();
 
   const handleBackPress = () => {
     goBack();
@@ -106,7 +107,7 @@ const UploadRecordScreen = () => {
 
       const recordId = Number(view.getBigUint64(offset, true));
 
-      return { recordId };
+      return {recordId};
     } catch (error) {
       console.error('Error parsing record counter data:', error);
       return null;
@@ -148,7 +149,7 @@ const UploadRecordScreen = () => {
   };
 
   const toast = useToast();
-  const { authorizeSession } = useAuthorization();
+  const {authorizeSession} = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
     async (enc: string, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
@@ -267,10 +268,10 @@ const UploadRecordScreen = () => {
           );
 
           const keys = [
-            { pubkey: userVaultPda, isSigner: false, isWritable: true },
-            { pubkey: recordCounterPda, isSigner: false, isWritable: true },
-            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
-            { pubkey: userPubkey, isSigner: true, isWritable: true },
+            {pubkey: userVaultPda, isSigner: false, isWritable: true},
+            {pubkey: recordCounterPda, isSigner: false, isWritable: true},
+            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+            {pubkey: userPubkey, isSigner: true, isWritable: true},
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -340,7 +341,6 @@ const UploadRecordScreen = () => {
             healthRecordPda,
           };
         } catch (error: any) {
-
           let errorMessage = 'Failed to upload health record';
 
           if (error.message?.includes('Record counter account not found')) {
@@ -407,7 +407,7 @@ const UploadRecordScreen = () => {
       <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}>
+          style={{flex: 1}}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled">
@@ -418,45 +418,82 @@ const UploadRecordScreen = () => {
                 style={styles.backButton}>
                 <Icon name="arrow-back" size={24} color="white" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Upload Record</Text>
+              <Text style={styles.headerTitle}>Upload Health Record</Text>
             </View>
 
             {/* Content */}
             <View style={styles.content}>
-              <TextInput
-                style={styles.input}
-                placeholder="Record Title"
-                placeholderTextColor="#aaa"
-                value={title}
-                onChangeText={text => {
-                  console.log('📥 Title input:', text);
-                  setTitle(text);
-                }}
-              />
+              {/* Title Input */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Record Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Blood Test Results - July 2025"
+                  placeholderTextColor="#aaa"
+                  value={title}
+                  onChangeText={text => {
+                    console.log('📥 Title input:', text);
+                    setTitle(text);
+                  }}
+                  maxLength={50}
+                />
+              </View>
 
-              <TextInput
-                style={[styles.input, styles.descriptionInput]}
-                placeholder="Description"
-                placeholderTextColor="#aaa"
-                value={description}
-                onChangeText={setDescription}
-                multiline
-              />
+              {/* Description Input */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Description *</Text>
+                <TextInput
+                  style={[styles.input, styles.descriptionInput]}
+                  placeholder="e.g., Complete blood count and lipid panel from City Hospital. Shows improved cholesterol levels."
+                  placeholderTextColor="#aaa"
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  maxLength={100}
+                />
+              </View>
 
-              <TouchableOpacity
-                style={styles.uploadBox}
-                onPress={handleFileSelect}
-                activeOpacity={0.9}>
-                <View style={styles.uploadBoxContent}>
-                  <Icon name="folder" size={48} color="white"></Icon>
-                  <Text style={styles.uploadText}>
-                    {selectedFile ? selectedFile.name : 'Tap to select a file'}
-                  </Text>
-                  {!selectedFile && (
-                    <Text style={styles.uploadSubText}>PDF or Image</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
+              {/* File Upload */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Health Record File *</Text>
+                <TouchableOpacity
+                  style={styles.uploadBox}
+                  onPress={handleFileSelect}
+                  activeOpacity={0.9}>
+                  <View style={styles.uploadBoxContent}>
+                    <Icon name="folder" size={48} color="white"></Icon>
+                    <Text style={styles.uploadText}>
+                      {selectedFile
+                        ? selectedFile.name
+                        : 'Tap to select your health record'}
+                    </Text>
+                    {!selectedFile ? (
+                      <Text style={styles.uploadSubText}>
+                        Supported formats: PDF, JPG, PNG{'\n'}
+                        Lab reports, X-rays, prescriptions, medical documents
+                      </Text>
+                    ) : (
+                      <View style={styles.fileInfo}>
+                        <Text style={styles.fileSize}>
+                          Size: {(selectedFile.size / 1024).toFixed(1)} KB
+                        </Text>
+                        <Text style={styles.fileType}>
+                          Type: {selectedFile.type}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Security Notice */}
+              <View style={styles.securityNotice}>
+                <Icon name="verified-user" size={20} color="#4CAF50" />
+                <Text style={styles.securityText}>
+                  Your data is encrypted end-to-end and stored securely. You can
+                  maintain full control over who can access your records.
+                </Text>
+              </View>
 
               <TouchableOpacity
                 style={[
@@ -464,12 +501,15 @@ const UploadRecordScreen = () => {
                   uploadHealthRecordLoading && styles.disabledButton,
                 ]}
                 onPress={handleUpload}
-                disabled={uploadHealthRecordLoading}>
+                disabled={
+                  uploadHealthRecordLoading ||
+                  !title ||
+                  !description ||
+                  !selectedFile
+                }>
                 <Icon name="cloud-upload" size={20} color="#fff" />
                 <Text style={styles.uploadButtonText}>
-                  {uploadHealthRecordLoading
-                    ? 'Please wait...'
-                    : 'Upload & Encrypt'}
+                  {uploadHealthRecordLoading ? 'Saving...' : 'Save'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -479,6 +519,8 @@ const UploadRecordScreen = () => {
     </SafeAreaView>
   );
 };
+
+export default UploadRecordScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -507,8 +549,50 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'white',
   },
+  howItWorksContainer: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  infoSection: {
+    marginBottom: 12,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4A9EFF',
+    marginLeft: 8,
+  },
+  infoDescription: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    lineHeight: 16,
+    marginLeft: 28,
+  },
   content: {
     flex: 1,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 8,
   },
   input: {
     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -516,48 +600,84 @@ const styles = StyleSheet.create({
     padding: 14,
     color: 'white',
     fontSize: 16,
-    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  inputHelper: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 4,
+    lineHeight: 16,
   },
   descriptionInput: {
-    height: 100,
+    height: 80,
     textAlignVertical: 'top',
   },
   uploadBox: {
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 16,
-    height: 180,
+    minHeight: 140,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderStyle: 'dashed',
   },
   uploadBoxContent: {
     alignItems: 'center',
-  },
-  fileIcon: {
-    fontSize: 42,
-    color: 'white',
-    marginBottom: 10,
+    padding: 20,
   },
   uploadText: {
     color: 'white',
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 4,
-    // fontWeight: 500,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   uploadSubText: {
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
+    lineHeight: 16,
+  },
+  fileInfo: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  fileSize: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  fileType: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  securityNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  securityText: {
+    flex: 1,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginLeft: 8,
+    lineHeight: 16,
   },
   disabledButton: {
-    backgroundColor: '#999',
+    backgroundColor: '#666',
+    opacity: 0.6,
   },
   uploadButton: {
     flexDirection: 'row',
     backgroundColor: '#004080',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -566,7 +686,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginLeft: 8,
     fontSize: 16,
+    fontWeight: '600',
   },
 });
-
-export default UploadRecordScreen;
