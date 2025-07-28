@@ -1,13 +1,13 @@
 use anchor_lang::prelude::*;
 
-pub mod state;
-pub mod events;
 pub mod error;
+pub mod events;
 pub mod instructions;
+pub mod state;
 use instructions::*;
 use state::*;
 
-declare_id!("5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX");
+declare_id!("BD5UPzmwnKQ8oAhDaViS9dXopBf5wVZ57RAngCtwEdkQ");
 
 pub const ANCHOR_DESCRIMINATOR_SIZE: usize = 8;
 
@@ -19,7 +19,11 @@ pub mod healthlock {
         instructions::initialize_record_counter(ctx)
     }
 
-    pub fn register_tee(ctx: Context<RegisterTEENode>, pubkey: Vec<u8>, attestation: Vec<u8>) -> Result<()> {
+    pub fn register_tee(
+        ctx: Context<RegisterTEENode>,
+        pubkey: Vec<u8>,
+        attestation: Vec<u8>,
+    ) -> Result<()> {
         instructions::register_tee_node(ctx, pubkey, attestation)
     }
 
@@ -32,6 +36,10 @@ pub mod healthlock {
         instructions::register_organization(ctx, name, description, contact_info)
     }
 
+    pub fn register_user(ctx: Context<RegisterUser>, user_name: String, age: u64) -> Result<()> {
+        instructions::register_user(ctx, user_name, age)
+    }
+
     pub fn upload_health_record(
         ctx: Context<UploadHealthRecord>,
         encrypted_data: String,
@@ -40,7 +48,14 @@ pub mod healthlock {
         description: String,
         title: String,
     ) -> Result<()> {
-        instructions::upload_health_record(ctx, encrypted_data, mime_type, file_size, description, title)
+        instructions::upload_health_record(
+            ctx,
+            encrypted_data,
+            mime_type,
+            file_size,
+            description,
+            title,
+        )
     }
 
     pub fn grant_access(
@@ -59,16 +74,11 @@ pub mod healthlock {
         instructions::revoke_access(ctx, record_id, organization)
     }
 
-    pub fn update_user_vault(
-        ctx: Context<UpdateUserVault>,
-        is_active: bool,
-    ) -> Result<()> {
-       instructions::update_user_vault(ctx, is_active)
+    pub fn update_user_vault(ctx: Context<UpdateUserVault>, is_active: bool, age:u64, name: String) -> Result<()> {
+        instructions::update_user_vault(ctx, is_active, name, age)
     }
 
-    pub fn deactivate_record(ctx: Context<DeactivateRecord>, record_id: u64,) -> Result<()> {
+    pub fn deactivate_record(ctx: Context<DeactivateRecord>, record_id: u64) -> Result<()> {
         instructions::deactivate_record(ctx, record_id)
     }
 }
-
-

@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use crate::error::ErrorCode;
 use crate::state::*;
 
-pub fn update_user_vault(ctx: Context<UpdateUserVault>, is_active: bool) -> Result<()> {
+pub fn update_user_vault(ctx: Context<UpdateUserVault>, is_active: bool, name: String, age: u64) -> Result<()> {
     let user_vault = &mut ctx.accounts.user_vault;
 
     require!(
@@ -12,6 +12,8 @@ pub fn update_user_vault(ctx: Context<UpdateUserVault>, is_active: bool) -> Resu
     );
 
     user_vault.is_active = is_active;
+    user_vault.age = age;
+    user_vault.name = name;
 
     msg!("User vault updated. Active status: {}", is_active);
     Ok(())
