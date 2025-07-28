@@ -10,13 +10,6 @@ pub struct HealthRecordUploaded {
 }
 
 #[event]
-pub struct UserRegistered {
-    pub owner: Pubkey,
-    pub vault: Pubkey,
-    pub timestamp: i64,
-}
-
-#[event]
 pub struct AccessGranted {
     pub record_owner: Pubkey,
     pub record_id: String,

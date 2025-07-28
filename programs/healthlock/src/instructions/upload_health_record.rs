@@ -23,8 +23,6 @@ pub fn upload_health_record(
         user_vault.record_ids = Vec::new();
         user_vault.created_at = current_timestamp;
         user_vault.is_active = true;
-        // user_vault.name = "".to_string();
-        // user_vault.age = 0;
     }
    
     health_record.owner = ctx.accounts.owner.key();
