@@ -37,5 +37,7 @@ pub enum ErrorCode {
     #[msg("TEE node is already registered")]
     NodeAlreadyRegistered,
     #[msg("record not found in organization")]
-    RecordNotFoundInOrganization
+    RecordNotFoundInOrganization,
+    #[msg("user vault is not active")]
+    UserIsNotActive
 }

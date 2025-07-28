@@ -99,9 +99,10 @@ describe("Health Records Complete Flow Test", () => {
     console.log("\nStep 2: Registering organization...");
     const organizationName = "Test Healthcare Organization";
     const contactInfo = "contact@testhealthcare.com";
+    const description = "this is the organization description";
 
     const registerOrgTx = await program.methods
-      .registerOrganization(organizationName, contactInfo)
+      .registerOrganization(organizationName, description, contactInfo)
       .accountsStrict({
         organization: organizationPda,
         owner: organizationOwnerKeypair.publicKey,
@@ -124,7 +125,7 @@ describe("Health Records Complete Flow Test", () => {
     const contact2Info = "contact2@testhealthcare.com";
 
     const registerOrg2Tx = await program.methods
-      .registerOrganization(organization2Name, contact2Info)
+      .registerOrganization(organization2Name, description, contact2Info)
       .accountsStrict({
         organization: organization2Pda,
         owner: organization2OwnerKeypair.publicKey,
@@ -344,3 +345,6 @@ describe("Health Records Complete Flow Test", () => {
     console.log("\n🎉 All tests passed! Complete flow executed successfully:");
   });
 });
+
+
+
