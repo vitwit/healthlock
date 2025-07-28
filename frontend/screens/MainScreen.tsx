@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -10,32 +10,80 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import ProfileScreen from './ProfileScreen';
 import FAQScreen from './FAQScreen';
 import theme from '../util/theme';
-import MyRecordsScreen from './MyRecordsScreen';
-
-// Screens
-const Home = () => <View style={styles.screen}><Text>Home Screen</Text></View>;
-const FAQ = () => <View style={styles.screen}><Text>FAQ Screen</Text></View>;
-const Records = () => <View style={styles.screen}><Text>Records Screen</Text></View>;
-const Profile = () => <View style={styles.screen}><Text>Profile Screen</Text></View>;
-const PlusAction = () => <View style={styles.screen}><Text>+ Action</Text></View>;
+import RecordsScreen from './RecordsScreen';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
+import { ERR_UNKNOWN, PROGRAM_ID } from '../util/constants';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { parseTEEState } from '../api/state';
+import { useToast } from '../components/providers/ToastContext';
+import HomeScreen from './HomeScreen';
+import { useNavigation } from '../components/providers/NavigationProvider';
 
 const MainScreen = () => {
     const [activeTab, setActiveTab] = useState('Home');
+    const { teeState, setTEEState } = useTEEContext();
+    const { connection } = useConnection();
+    const toast = useToast();
+    const { navigate, currentScreen , selectedRole} = useNavigation();
+
+    if (currentScreen !== 'Dashboard') {
+        // Do not render MainScreen if it's not the current screen
+        return null;
+    }
+
+    const [loading, setLoading] = useState<boolean>(false);
+
+    const fetchTEEState = async () => {
+        try {
+            setLoading(true);
+            const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+                filters: [{ dataSize: 1073 }],
+            });
+
+            for (const account of accounts) {
+                const parsed = parseTEEState(account.account.data);
+                setTEEState({
+                    attestation: parsed.attestation,
+                    isInitialized: parsed.isInitialized,
+                    pubkey: parsed.pubkey,
+                    signer: parsed.signer,
+                });
+            }
+        } catch (err: any) {
+            if (err.message) {
+                toast.show({
+                    message: err.message,
+                    type: 'error',
+                });
+            } else {
+                toast.show({
+                    message: ERR_UNKNOWN,
+                    type: 'error',
+                });
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!teeState)
+            fetchTEEState()
+    }, []);
+
 
     const renderScreen = () => {
         switch (activeTab) {
             case 'Home':
-                return <Home />;
+                return <HomeScreen />;
             case 'Records':
-                return <MyRecordsScreen />;
+                return <RecordsScreen />;
             case 'Profile':
                 return <ProfileScreen />;
-            case 'Plus':
-                return <PlusAction />;
             case 'FAQ':
                 return <FAQScreen />;
             default:
-                return <Home />;
+                return <HomeScreen />;
         }
     };
 
@@ -44,12 +92,14 @@ const MainScreen = () => {
             <View style={styles.content}>{renderScreen()}</View>
 
             {/* Floating + Button */}
-            <TouchableOpacity onPress={() => setActiveTab('Plus')}>
-                <View
-                    style={styles.fab}>
-                    <Icon name="add" size={36} color="white" />
-                </View>
-            </TouchableOpacity>
+            {selectedRole === "user" &&
+                <TouchableOpacity onPress={() => navigate("Upload")}>
+                    <View
+                        style={styles.fab}>
+                        <Icon name="add" size={36} color="white" />
+                    </View>
+                </TouchableOpacity>
+            }
 
 
             {/* Bottom Navigation */}
@@ -61,7 +111,7 @@ const MainScreen = () => {
 
                 <TouchableOpacity onPress={() => setActiveTab('Records')} style={styles.tab}>
                     <Icon name="save" size={28} color={activeTab === 'Records' ? '#00d4ff' : '#aaa'} />
-                    <Text style={[styles.label, activeTab === 'Records' && styles.activeLabel]}>My Records</Text>
+                    <Text style={[styles.label, activeTab === 'Records' && styles.activeLabel]}>{selectedRole === "user" ? "My Records" : "Records"}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={() => setActiveTab('FAQ')} style={styles.tab}>

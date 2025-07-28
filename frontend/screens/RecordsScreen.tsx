@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import LinearGradient from 'react-native-linear-gradient';
 import theme from '../util/theme';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NavBar } from '../components/NavBar';
 import RecordCard, { RecordType } from '../components/RecordCard';
 import { useAuthorization } from '../components/providers/AuthorizationProvider';
@@ -54,7 +54,7 @@ export function encodeAnchorString(str: string): Buffer {
 }
 
 
-const MyRecordsScreen = () => {
+const RecordsScreen = () => {
 
     const { selectedAccount, deauthorizeSession } = useAuthorization();
     const { selectedRole } = useNavigation();
@@ -76,9 +76,6 @@ const MyRecordsScreen = () => {
     const [description, setDescription] = useState('');
     const [contactInfo, setContactInfo] = useState('');
 
-    const [organizationRecordsLoading, setOrganizationRecordsLoading] = useState<boolean>(false);
-    const [organizationLoading, setOrganizationLoading] =
-        useState<boolean>(false);
     const [organization, setOrganization] = useState<Organization | undefined>(
         undefined,
     );
@@ -88,7 +85,6 @@ const MyRecordsScreen = () => {
     const [userRecordsCount, setUserRecordCount] = useState<number>(0);
     const [sharedRecordsCount, setSharedRecordsCount] = useState<number>(0);
     const [loading, setLoading] = useState<boolean>(false);
-    const [userRecordsLoading, setUserRecordsLoading] = useState<boolean>(false);
     const [refreshing, setRefreshing] = useState<boolean>(false); // Add refresh state
     const [accessListLength, setaccessListLength] = useState<number>(0);
 
@@ -100,26 +96,26 @@ const MyRecordsScreen = () => {
         }
         try {
             console.log("fetching organization")
-            setOrganizationLoading(true);
+            setLoading(true);
             const result = await getOrganization(connection, publicKey);
             if (result && result.name.length > 0) {
                 setOrganization(result);
-                setRegisteredOrganization(true);
+                setLoading(true);
 
                 await getOrganizationRecords(result.recordIds)
             } else {
-                setRegisteredOrganization(false);
+                setLoading(false);
             }
             console.log("successfull fetched1")
         } catch (error: any) {
             if (error && error.message === 'Organization account not found') {
-                setRegisteredOrganization(false);
+                setLoading(false);
             } else {
                 toast.show({ type: 'error', message: error?.message || ERR_UNKNOWN });
             }
         } finally {
             console.log("successfull fetched2")
-            setOrganizationLoading(false);
+            setLoading(false);
         }
     };
 
@@ -127,7 +123,7 @@ const MyRecordsScreen = () => {
     const getOrganizationRecords = async (accessRecords: string[]) => {
         const recordIdSet = new Set(accessRecords);
         const discriminator = getDiscriminator('HealthRecord');
-        setOrganizationRecordsLoading(false);
+        setLoading(false);
         const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
             filters: [
                 {
@@ -257,7 +253,7 @@ const MyRecordsScreen = () => {
                     err?.message,
                 );
             } finally {
-                setOrganizationRecordsLoading(false);
+                setLoading(false);
             }
 
             setaccessListLength(parsedRecords.length);
@@ -284,7 +280,7 @@ const MyRecordsScreen = () => {
         }
 
         try {
-            setUserRecordsLoading(true);
+            setLoading(true);
             const [userVaultPda] = PublicKey.findProgramAddressSync(
                 [Buffer.from('user_vault'), publicKey.toBuffer()],
                 PROGRAM_ID,
@@ -445,7 +441,7 @@ const MyRecordsScreen = () => {
             console.error('Failed to fetch health records:', err);
         } finally {
             console.log('🔁 Done loading');
-            setUserRecordsLoading(false);
+            setLoading(false);
         }
     };
 
@@ -748,7 +744,12 @@ const MyRecordsScreen = () => {
             <ScrollView
                 style={styles.scrollView}
             >
-                {
+                {loading ? (
+                    <View>
+                        <ActivityIndicator style={styles.loading} size="large" color="#fff" />
+                        <Text style={styles.loadingText}>Please wait...</Text>
+                    </View>
+                ) : (
                     records.map((record, index) =>
 
                         <RecordCard
@@ -758,7 +759,7 @@ const MyRecordsScreen = () => {
                             onDelete={() => { }}
                         />
                     )
-                }
+                )}
             </ScrollView>
 
 
@@ -767,12 +768,25 @@ const MyRecordsScreen = () => {
     );
 }
 
-export default MyRecordsScreen;
+export default RecordsScreen;
 
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
     scrollView: {
         padding: 16,
-    }
+    },
+    loading: {
+        flex: 1,
+        marginTop: 70,
+        justifyContent: 'center',
+    },
+    loadingText: {
+        fontSize: 16,
+        marginTop: 16,
+        justifyContent: 'center',
+        textAlign: 'center',
+        fontWeight: '500',
+        color: theme.colors.textSecondary,
+    },
 });

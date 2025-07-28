@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,8 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DocumentPicker from 'react-native-document-picker';
-import {useNavigation} from '../components/providers/NavigationProvider';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
 import {
   transact,
   Web3MobileWallet,
@@ -28,12 +28,13 @@ import {
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
-import {PROGRAM_ID} from '../util/constants';
-import {useConnection} from '../components/providers/ConnectionProvider';
-import {useToast} from '../components/providers/ToastContext';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {sha256} from '@noble/hashes/sha256';
-import {uploadJsonToPinata} from '../util/ipfs';
+import { PROGRAM_ID } from '../util/constants';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { useToast } from '../components/providers/ToastContext';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { sha256 } from '@noble/hashes/sha256';
+import { uploadJsonToPinata } from '../util/ipfs';
+import { Buffer } from 'buffer';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
@@ -47,17 +48,17 @@ interface RecordCounterData {
   recordId: number;
 }
 
-const {Encryptor} = NativeModules;
+const { Encryptor } = NativeModules;
 
 const UploadRecordScreen = () => {
-  const {connection} = useConnection();
-  const {navigate, goBack} = useNavigation();
+  const { connection } = useConnection();
+  const { navigate, goBack } = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<any>(null);
 
-  const {teeState} = useTEEContext();
+  const { teeState } = useTEEContext();
 
   const handleBackPress = () => {
     goBack();
@@ -107,7 +108,7 @@ const UploadRecordScreen = () => {
 
       const recordId = Number(view.getBigUint64(offset, true));
 
-      return {recordId};
+      return { recordId };
     } catch (error) {
       console.error('Error parsing record counter data:', error);
       return null;
@@ -149,7 +150,7 @@ const UploadRecordScreen = () => {
   };
 
   const toast = useToast();
-  const {authorizeSession} = useAuthorization();
+  const { authorizeSession } = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
     async (enc: string, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
@@ -268,10 +269,10 @@ const UploadRecordScreen = () => {
           );
 
           const keys = [
-            {pubkey: userVaultPda, isSigner: false, isWritable: true},
-            {pubkey: recordCounterPda, isSigner: false, isWritable: true},
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: userVaultPda, isSigner: false, isWritable: true },
+            { pubkey: recordCounterPda, isSigner: false, isWritable: true },
+            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -407,7 +408,7 @@ const UploadRecordScreen = () => {
       <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{flex: 1}}>
+          style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled">
@@ -425,10 +426,10 @@ const UploadRecordScreen = () => {
             <View style={styles.content}>
               {/* Title Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Record Title *</Text>
+                <Text style={styles.inputLabel}>Record Title</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g., Blood Test Results - July 2025"
+                  placeholder="Blood Test Results - July 2025"
                   placeholderTextColor="#aaa"
                   value={title}
                   onChangeText={text => {
@@ -441,10 +442,10 @@ const UploadRecordScreen = () => {
 
               {/* Description Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Description *</Text>
+                <Text style={styles.inputLabel}>Description</Text>
                 <TextInput
                   style={[styles.input, styles.descriptionInput]}
-                  placeholder="e.g., Complete blood count and lipid panel from City Hospital. Shows improved cholesterol levels."
+                  placeholder="Health report from City Hospital – includes CBC and lipid panel results."
                   placeholderTextColor="#aaa"
                   value={description}
                   onChangeText={setDescription}
@@ -455,7 +456,7 @@ const UploadRecordScreen = () => {
 
               {/* File Upload */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Health Record File *</Text>
+                <Text style={styles.inputLabel}>Health Record File</Text>
                 <TouchableOpacity
                   style={styles.uploadBox}
                   onPress={handleFileSelect}
@@ -469,8 +470,7 @@ const UploadRecordScreen = () => {
                     </Text>
                     {!selectedFile ? (
                       <Text style={styles.uploadSubText}>
-                        Supported formats: PDF, JPG, PNG{'\n'}
-                        Lab reports, X-rays, prescriptions, medical documents
+                        Supported formats: PDF, JPG, PNG
                       </Text>
                     ) : (
                       <View style={styles.fileInfo}>
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
+    borderRadius: 8,
     padding: 14,
     color: 'white',
     fontSize: 16,

@@ -1,12 +1,12 @@
 import React from 'react';
-import {SafeAreaView, StyleSheet} from 'react-native';
-import {ConnectionProvider} from './components/providers/ConnectionProvider';
-import {AuthorizationProvider} from './components/providers/AuthorizationProvider';
+import { SafeAreaView, StyleSheet } from 'react-native';
+import { ConnectionProvider } from './components/providers/ConnectionProvider';
+import { AuthorizationProvider } from './components/providers/AuthorizationProvider';
 import {
   NavigationProvider,
   useNavigation,
 } from './components/providers/NavigationProvider';
-import {TextEncoder, TextDecoder} from 'text-encoding';
+import { TextEncoder, TextDecoder } from 'text-encoding';
 
 import ConnectWalletScreen from './screens/ConnectWalletScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -15,8 +15,8 @@ import ViewRecordsScreen from './screens/ViewRecordsScreen';
 import OrganizationsScreen from './screens/OrganizationsScreen';
 import RegisterOrganizationScreen from './screens/RegisterOrganizationScreen';
 import ShareRecordDialogScreen from './screens/ShareRecordDialogScreen';
-import {ToastProvider} from './components/providers/ToastContext';
-import {TEEStateProvider} from './components/providers/TEEStateProvider';
+import { ToastProvider } from './components/providers/ToastContext';
+import { TEEStateProvider } from './components/providers/TEEStateProvider';
 import { SOLANA_VALIDATOR } from './util/constants';
 import MainScreen from './screens/MainScreen';
 
@@ -28,7 +28,7 @@ if (typeof global.TextDecoder === 'undefined') {
 }
 
 function AppNavigator() {
-  const {currentScreen} = useNavigation();
+  const { currentScreen } = useNavigation();
 
   switch (currentScreen) {
     case 'ConnectWallet':
@@ -37,8 +37,6 @@ function AppNavigator() {
       return <MainScreen />;
     case 'Upload':
       return <UploadRecordScreen />;
-    case 'Records':
-      return <ViewRecordsScreen />;
 
     case 'Organizations':
       return <OrganizationsScreen />;
@@ -46,8 +44,6 @@ function AppNavigator() {
     case 'ShareRecord':
       return <ShareRecordDialogScreen />;
 
-    case 'RegisterOrg':
-      return <RegisterOrganizationScreen />;
     default:
       return <ConnectWalletScreen />;
   }
@@ -56,7 +52,7 @@ function AppNavigator() {
 export default function App() {
   return (
     <ConnectionProvider
-      config={{commitment: 'processed'}}
+      config={{ commitment: 'processed' }}
       endpoint={SOLANA_VALIDATOR}>
       <AuthorizationProvider>
         <TEEStateProvider>
