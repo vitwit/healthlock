@@ -43,7 +43,6 @@ const faqs = [
     },
 ];
 
-
 const FAQScreen = () => {
     const [expandedIdx, setExpandedIdx] = React.useState<number | null>(null);
 
