@@ -58,77 +58,152 @@ export class HealthLockClient {
     return tx;
   }
 
-//   async registerOrganization(
-//     name: string,
-//     contact_info: string,
-//     authority: Keypair
-//   ): Promise<string> {
-//     const [organizationPda] = PublicKey.findProgramAddressSync(
-//       [Buffer.from(this.ORGANIZATION_SEED), authority.publicKey.toBuffer()],
-//       this.program.programId
-//     );
+  async updateUserVault(
+    name: string,
+    age: number,
+    owner: Keypair
+  ): Promise<string> {
+    const [userVaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from(this.USER_VAULT), owner.publicKey.toBuffer()],
+      this.program.programId
+    );
 
-//     const registerOrgTx = await this.program.methods
-//       .registerOrganization(name, contact_info)
-//       .accountsStrict({
-//         organization: organizationPda,
-//         owner: authority.publicKey,
-//         systemProgram: SystemProgram.programId,
-//       })
-//       .signers([authority])
-//       .rpc();
+    const tx = await this.program.methods
+      .updateUserVault(new anchor.BN(age), name)
+      .accounts({
+        userVault: userVaultPda,
+        owner: owner.publicKey,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .signers([owner])
+      .rpc();
 
-//     console.log('✅ organization registered with transaction:', registerOrgTx);
+    console.log('✅ user vault updated with transaction:', tx);
 
-//     const organizationAccount = await this.program.account.organization.fetch(
-//       organizationPda
-//     );
+    // Fetch and display the updated user vault
+    try {
+      const userVaultAccount = await this.program.account.userVault.fetch(
+        userVaultPda
+      );
 
-//     const formatted = {
-//       name: organizationAccount.name.toString(),
-//       owner: anchor.web3.PublicKey,
-//       organizationId: organizationAccount.organizationId.toString(),
-//       contactInfo: organizationAccount.contactInfo.toString(),
-//       createdAt: organizationAccount.owner.toString(),
-//     };
-//     console.log(JSON.stringify({ organizationAccount: formatted }, null, 1));
+      const formatted = {
+        owner: userVaultAccount.owner.toString(),
+        name: userVaultAccount.name,
+        age: userVaultAccount.age.toString(),
+        recordIds: userVaultAccount.recordIds.map((id: any) => id.toString()),
+        createdAt: userVaultAccount.createdAt.toString(),
+      };
+      console.log(JSON.stringify({ userVault: formatted }, null, 2));
+    } catch (fetchError) {
+      console.log(
+        'Note: Could not fetch updated user vault account:',
+        fetchError
+      );
+    }
 
-//     return registerOrgTx;
-//   }
+    return tx;
+  }
+
+  async fetchUserVault(owner: PublicKey): Promise<any> {
+    const [userVaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from(this.USER_VAULT), owner.toBuffer()],
+      this.program.programId
+    );
+
+    try {
+      const userVaultAccount = await this.program.account.userVault.fetch(
+        userVaultPda
+      );
+
+      const formatted = {
+        pda: userVaultPda.toString(),
+        owner: userVaultAccount.owner.toString(),
+        name: userVaultAccount.name,
+        age: userVaultAccount.age.toString(),
+        recordIds: userVaultAccount.recordIds.map((id: any) => id.toString()),
+        createdAt: userVaultAccount.createdAt.toString(),
+      };
+
+      console.log(JSON.stringify({ userVault: formatted }, null, 2));
+      return userVaultAccount;
+    } catch (error) {
+      console.log('User vault not found or not initialized yet');
+      return null;
+    }
+  }
+
+
+  //   async registerOrganization(
+  //     name: string,
+  //     contact_info: string,
+  //     authority: Keypair
+  //   ): Promise<string> {
+  //     const [organizationPda] = PublicKey.findProgramAddressSync(
+  //       [Buffer.from(this.ORGANIZATION_SEED), authority.publicKey.toBuffer()],
+  //       this.program.programId
+  //     );
+
+  //     const registerOrgTx = await this.program.methods
+  //       .registerOrganization(name, contact_info)
+  //       .accountsStrict({
+  //         organization: organizationPda,
+  //         owner: authority.publicKey,
+  //         systemProgram: SystemProgram.programId,
+  //       })
+  //       .signers([authority])
+  //       .rpc();
+
+  //     console.log('✅ organization registered with transaction:', registerOrgTx);
+
+  //     const organizationAccount = await this.program.account.organization.fetch(
+  //       organizationPda
+  //     );
+
+  //     const formatted = {
+  //       name: organizationAccount.name.toString(),
+  //       owner: anchor.web3.PublicKey,
+  //       organizationId: organizationAccount.organizationId.toString(),
+  //       contactInfo: organizationAccount.contactInfo.toString(),
+  //       createdAt: organizationAccount.owner.toString(),
+  //     };
+  //     console.log(JSON.stringify({ organizationAccount: formatted }, null, 1));
+
+  //     return registerOrgTx;
+  //   }
 
   async fetchAllOrganizations() {
     const allOrganizations = await this.program.account.organization.all();
-    
+
     console.log(`\nTotal organizations registered: ${allOrganizations.length}`);
-    
-    console.log("\n🏥 All Registered Organizations:");
-    console.log("==================================");
+
+    console.log('\n🏥 All Registered Organizations:');
+    console.log('==================================');
     allOrganizations.forEach((org, index) => {
       console.log(`\norganizations list ${JSON.stringify(org)}:`);
     });
   }
 
   async fetchAllRecords(authority: Keypair) {
-    console.log("\n=== Fetching all the health records of a user ===");
-    const userHealthRecordsFiltered = await this.program.account.healthRecord.all([
-      {
-        memcmp: {
-          offset: 8,
-          bytes:"J4KG1GEthENbivCsZgJqa1SYMM2Sgpm8rcEVjy3Ka4ei",
+    console.log('\n=== Fetching all the health records of a user ===');
+    const userHealthRecordsFiltered =
+      await this.program.account.healthRecord.all([
+        {
+          memcmp: {
+            offset: 8,
+            bytes: 'J4KG1GEthENbivCsZgJqa1SYMM2Sgpm8rcEVjy3Ka4ei',
+          },
         },
-      },
-    ]);
+      ]);
 
-    const allHealthRecords = userHealthRecordsFiltered.map(record => ({
+    const allHealthRecords = userHealthRecordsFiltered.map((record) => ({
       recordId: record.account.recordId.toNumber(),
       pda: record.publicKey,
-      data: record.account
+      data: record.account,
     }));
 
     allHealthRecords.forEach((record, index) => {
       console.log(`\nRecords list ${JSON.stringify(record)}:`);
-    })
-
+    });
   }
 }
 
@@ -153,6 +228,12 @@ async function main() {
   } catch (err) {
     console.error('❌ Setup failed:', err);
   }
+
+  // try {
+  //   await client.updateUserVault("John Doe", 30, authority);
+  // } catch (err) {
+  //   console.error('❌ User vault update failed:', err);
+  // }
 
   // try {
   //   await client.registerOrganization("test-organization", "guddu", authority);

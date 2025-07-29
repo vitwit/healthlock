@@ -34,6 +34,7 @@ import {useToast} from '../components/providers/ToastContext';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
 import {sha256} from '@noble/hashes/sha256';
 import {uploadJsonToPinata} from '../util/ipfs';
+import {Buffer} from 'buffer';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
@@ -469,8 +470,7 @@ const UploadRecordScreen = () => {
                     </Text>
                     {!selectedFile ? (
                       <Text style={styles.uploadSubText}>
-                        Supported formats: PDF, JPG, PNG{'\n'}
-                        Lab reports, X-rays, prescriptions, medical documents
+                        Supported formats: PDF, JPG, PNG
                       </Text>
                     ) : (
                       <View style={styles.fileInfo}>
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
+    borderRadius: 8,
     padding: 14,
     color: 'white',
     fontSize: 16,
