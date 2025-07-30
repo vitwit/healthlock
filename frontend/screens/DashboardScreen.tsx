@@ -167,7 +167,7 @@ const DashboardScreen = () => {
       } else {
         setRegisteredOrganization(false);
       }
-      console.log('successfull fetched1');
+      console.log(result);
     } catch (error: any) {
       if (error && error.message === 'Organization account not found') {
         setRegisteredOrganization(false);

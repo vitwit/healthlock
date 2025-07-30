@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,8 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import DocumentPicker from 'react-native-document-picker';
-import {useNavigation} from '../components/providers/NavigationProvider';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
+import { useNavigation } from '../components/providers/NavigationProvider';
+import { useTEEContext } from '../components/providers/TEEStateProvider';
 import {
   transact,
   Web3MobileWallet,
@@ -28,13 +28,14 @@ import {
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
-import {PROGRAM_ID} from '../util/constants';
-import {useConnection} from '../components/providers/ConnectionProvider';
-import {useToast} from '../components/providers/ToastContext';
-import {useAuthorization} from '../components/providers/AuthorizationProvider';
-import {sha256} from '@noble/hashes/sha256';
-import {uploadJsonToPinata} from '../util/ipfs';
-import {Buffer} from 'buffer';
+import { PROGRAM_ID } from '../util/constants';
+import { useConnection } from '../components/providers/ConnectionProvider';
+import { useToast } from '../components/providers/ToastContext';
+import { useAuthorization } from '../components/providers/AuthorizationProvider';
+import { sha256 } from '@noble/hashes/sha256';
+import { uploadJsonToPinata } from '../util/ipfs';
+import { Buffer } from 'buffer';
+import theme from '../util/theme';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
@@ -48,17 +49,17 @@ interface RecordCounterData {
   recordId: number;
 }
 
-const {Encryptor} = NativeModules;
+const { Encryptor } = NativeModules;
 
 const UploadRecordScreen = () => {
-  const {connection} = useConnection();
-  const {navigate, goBack} = useNavigation();
+  const { connection } = useConnection();
+  const { navigate, goBack } = useNavigation();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<any>(null);
 
-  const {teeState} = useTEEContext();
+  const { teeState } = useTEEContext();
 
   const handleBackPress = () => {
     goBack();
@@ -108,7 +109,7 @@ const UploadRecordScreen = () => {
 
       const recordId = Number(view.getBigUint64(offset, true));
 
-      return {recordId};
+      return { recordId };
     } catch (error) {
       console.error('Error parsing record counter data:', error);
       return null;
@@ -150,7 +151,7 @@ const UploadRecordScreen = () => {
   };
 
   const toast = useToast();
-  const {authorizeSession} = useAuthorization();
+  const { authorizeSession } = useAuthorization();
   const uploadHealthRecordTransaction = useCallback(
     async (enc: string, mimeType: string, fileSize: number) => {
       return await transact(async (wallet: Web3MobileWallet) => {
@@ -269,10 +270,10 @@ const UploadRecordScreen = () => {
           );
 
           const keys = [
-            {pubkey: userVaultPda, isSigner: false, isWritable: true},
-            {pubkey: recordCounterPda, isSigner: false, isWritable: true},
-            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
-            {pubkey: userPubkey, isSigner: true, isWritable: true},
+            { pubkey: userVaultPda, isSigner: false, isWritable: true },
+            { pubkey: recordCounterPda, isSigner: false, isWritable: true },
+            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
+            { pubkey: userPubkey, isSigner: true, isWritable: true },
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
@@ -408,7 +409,7 @@ const UploadRecordScreen = () => {
       <LinearGradient colors={['#001F3F', '#003366']} style={styles.gradient}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{flex: 1}}>
+          style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled">
@@ -589,9 +590,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
+    fontSize: 14,
+    color: theme.colors.textSecondary,
     marginBottom: 8,
   },
   input: {
@@ -628,17 +628,15 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   uploadText: {
-    color: 'white',
-    fontSize: 16,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
     textAlign: 'center',
     marginBottom: 8,
-    fontWeight: '500',
   },
   uploadSubText: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
-    lineHeight: 16,
   },
   fileInfo: {
     alignItems: 'center',

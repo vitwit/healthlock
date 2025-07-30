@@ -36,9 +36,6 @@ const HomeScreen = () => {
     const [contactInfo, setContactInfo] = useState('');
     const [organizationLoading, setOrganizationLoading] =
         useState<boolean>(false);
-    const [organization, setOrganization] = useState<Organization | undefined>(
-        undefined,
-    );
     const [registeredOrganization, setRegisteredOrganization] =
         useState<boolean>(false);
 
@@ -132,6 +129,12 @@ const HomeScreen = () => {
         useState<boolean>(false);
 
 
+    useEffect(() => {
+        if (selectedRole === "organization" && publicKey) {
+            fetchOrganization();
+        }
+    }, [selectedRole, publicKey]);
+
 
     const fetchOrganization = async () => {
         if (!publicKey) {
@@ -143,13 +146,12 @@ const HomeScreen = () => {
             setOrganizationLoading(true);
             const result = await getOrganization(connection, publicKey);
             if (result && result.name.length > 0) {
-                setOrganization(result);
                 setRegisteredOrganization(true);
             } else {
                 setRegisteredOrganization(false);
             }
-            console.log("successfull fetched1")
         } catch (error: any) {
+            console.log(error)
             if (error && error.message === 'Organization account not found') {
                 setRegisteredOrganization(false);
             } else {

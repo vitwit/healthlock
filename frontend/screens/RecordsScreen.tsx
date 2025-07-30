@@ -320,8 +320,6 @@ const RecordsScreen = () => {
                 ],
             });
 
-            console.log('✅ Accounts found:', accounts.length);
-
             const parsedRecords: RecordType[] = [];
 
             for (const acc of accounts) {
@@ -755,15 +753,20 @@ const RecordsScreen = () => {
                         <RecordCard
                             key={index}
                             record={record}
-                            navigate={() => { }}
-                            onDelete={() => { }}
+                            onDelete={handleDeleteRecord}
                         />
                     )
                 )}
+
+                {
+                    records.length === 0 && !loading &&
+                    <View style={styles.noRecords}>
+                        <Text style={styles.noRecordsText}>
+                            No Records Found
+                        </Text>
+                    </View>
+                }
             </ScrollView>
-
-
-
         </LinearGradient>
     );
 }
@@ -789,4 +792,17 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: theme.colors.textSecondary,
     },
+    noRecords: {
+        flex: 1,
+        marginTop: 70,
+        justifyContent: 'center',
+    },
+    noRecordsText: {
+        fontSize: 16,
+        marginTop: 16,
+        justifyContent: 'center',
+        textAlign: 'center',
+        fontWeight: '500',
+        color: theme.colors.textSecondary,
+    }
 });
