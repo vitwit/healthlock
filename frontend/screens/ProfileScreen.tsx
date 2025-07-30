@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -8,49 +8,60 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
-import { sha256 } from 'js-sha256';
+import {sha256} from 'js-sha256';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
-import { ERR_UNKNOWN, PROGRAM_ID, SOLANA_VALIDATOR } from '../util/constants';
+import {ERR_UNKNOWN, PROGRAM_ID, SOLANA_VALIDATOR} from '../util/constants';
 import {
   Transaction,
   SystemProgram,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { useToast } from '../components/providers/ToastContext';
+import {useToast} from '../components/providers/ToastContext';
 import {
   Account,
   useAuthorization,
 } from '../components/providers/AuthorizationProvider';
-import { PublicKey } from '@solana/web3.js';
-import { NavBar } from '../components/NavBar';
-import { useConnection } from '../components/providers/ConnectionProvider';
+import {PublicKey} from '@solana/web3.js';
+import {NavBar} from '../components/NavBar';
+import {useConnection} from '../components/providers/ConnectionProvider';
 import theme from '../util/theme';
 import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import { encodeAnchorString } from './DashboardScreen';
-import { getUser, User } from '../api/user';
+import {encodeAnchorString} from './DashboardScreen';
+import {getUser, User} from '../api/user';
+import {useNavigation} from '../components/providers/NavigationProvider';
+import {getOrganization, Organization} from '../api/organization';
 
 const ProfileScreen = () => {
   const toast = useToast();
 
-  const { accounts, selectedAccount } = useAuthorization();
+  const {accounts, selectedAccount} = useAuthorization();
   const [pubkey, setPubKey] = useState<PublicKey | null>(null);
-  const [name, setName] = useState('John Doe');
-  const [age, setAge] = useState(30);
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [getSolLoading, setGetSolLoading] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [updateUserLoading, setUpdateUserLoading] = useState(false);
   const [balance, setBalance] = useState<number>(0);
-  const { authorizeSession } = useAuthorization();
+  const {authorizeSession} = useAuthorization();
   const [fetchUserLoading, setFetchUserLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [organizationLoading, setOrganizationLoading] =
+    useState<boolean>(false);
+  const [organization, setOrganization] = useState<Organization | undefined>(
+    undefined,
+  );
 
-  const { connection } = useConnection();
+  const {selectedRole} = useNavigation();
+  const isUser = selectedRole === 'user';
+
+  const {connection} = useConnection();
 
   const [publicKey, setPublicKey] = useState<PublicKey>();
   useEffect(() => {
@@ -85,8 +96,36 @@ const ProfileScreen = () => {
   }, [accounts]);
 
   useEffect(() => {
-    fetchUser();
-  }, []);
+    if (pubkey) {
+      if (isUser) {
+        fetchUser();
+      } else {
+        fetchOrganization();
+      }
+    }
+  }, [publicKey]);
+
+  const fetchOrganization = async () => {
+    if (!publicKey) {
+      console.log('Wallet not connected. Pubkey not found!');
+      return;
+    }
+    try {
+      console.log('fetching organization');
+      setOrganizationLoading(true);
+      const result = await getOrganization(connection, publicKey);
+      if (result && result.name.length > 0) {
+        setOrganization(result);
+      } else {
+      }
+      console.log(result);
+    } catch (error: any) {
+      toast.show({type: 'error', message: error?.message || ERR_UNKNOWN});
+    } finally {
+      console.log('successfull fetched2');
+      setOrganizationLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -128,7 +167,7 @@ const ProfileScreen = () => {
       }
       console.log('successfull fetched user');
     } catch (error: any) {
-      toast.show({ type: 'error', message: error?.message || ERR_UNKNOWN });
+      toast.show({type: 'error', message: error?.message || ERR_UNKNOWN});
     } finally {
       console.log('successfull fetched2');
       setFetchUserLoading(false);
@@ -140,7 +179,7 @@ const ProfileScreen = () => {
       if (!pubkey) return;
       setGetSolLoading(true);
       await requestSolAirdrop(pubkey, 5_000_000_000);
-      toast.show({ message: 'Airdrop received', type: 'success' });
+      toast.show({message: 'Airdrop received', type: 'success'});
       await getBalance();
     } catch (err: any) {
       toast.show({
@@ -234,7 +273,8 @@ const ProfileScreen = () => {
 
           // Confirm transaction with the same blockhash
           console.log('⏳ Confirming transaction...');
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          // await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -342,7 +382,7 @@ const ProfileScreen = () => {
 
     const res = await fetch(SOLANA_VALIDATOR, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
     });
 
@@ -352,7 +392,7 @@ const ProfileScreen = () => {
     return result.result;
   }
 
-  const { deauthorizeSession } = useAuthorization();
+  const {deauthorizeSession} = useAuthorization();
   const [disconnecting, setDisconnecting] = useState(false);
 
   const handleDisconnectPress = useCallback(async () => {
@@ -389,19 +429,46 @@ const ProfileScreen = () => {
               </Text>
             </View>
 
-            <View style={styles.infoContainer}>
-              <Text style={styles.cardValue}>{name}</Text>
-              <Text style={styles.cardLabel}>
-                Age:&nbsp;<Text style={styles.cardValue}>{age}</Text>
-              </Text>
-            </View>
+            {fetchUserLoading || organizationLoading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <View style={styles.infoContainer}>
+                {isUser ? (
+                  name ? (
+                    <>
+                      <Text style={styles.cardValue}>{name}</Text>
+                      <Text style={styles.cardLabel}>
+                        Age:&nbsp;<Text style={styles.cardValue}>{age}</Text>
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={{color: 'white', fontSize: 12}}>
+                      User not registered
+                    </Text>
+                  )
+                ) : organization?.name ? (
+                  <>
+                    <Text style={styles.cardValue}>{organization.name}</Text>
+                    <Text style={{color: 'white', fontSize: 12, marginTop: 7}}>
+                      {organization.description}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={{color: 'white', fontSize: 12}}>
+                    Organization not registered
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
 
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => setModalVisible(true)}>
-            <Text style={styles.editButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
+          {isUser ? (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => setModalVisible(true)}>
+              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Wallet Info Card */}
@@ -425,7 +492,7 @@ const ProfileScreen = () => {
 
           <View style={styles.walletRow}>
             <Icon name="account-balance-wallet" size={24} color="#00c9a7" />
-            <View style={{ marginLeft: 10 }}>
+            <View style={{marginLeft: 10}}>
               <Text style={styles.walletName}>{account?.label || 'User'}</Text>
               <Text style={styles.walletAddress}>
                 {pubkey?.toBase58().slice(0, 6)}...
@@ -434,9 +501,9 @@ const ProfileScreen = () => {
             </View>
             <TouchableOpacity
               onPress={() =>
-                pubkey && toast.show({ message: 'Copied!', type: 'success' })
+                pubkey && toast.show({message: 'Copied!', type: 'success'})
               }
-              style={{ marginLeft: 'auto' }}>
+              style={{marginLeft: 'auto'}}>
               <Icon name="content-copy" size={20} color="#ccc" />
             </TouchableOpacity>
           </View>
@@ -496,18 +563,18 @@ const ProfileScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContainer: { padding: 24, paddingTop: 24, alignItems: 'center' },
+  container: {flex: 1},
+  scrollContainer: {padding: 24, paddingTop: 24, alignItems: 'center'},
 
-  avatarSection: { alignItems: 'center', marginBottom: 20 },
+  avatarSection: {alignItems: 'center', marginBottom: 20},
   addressBox: {
-    backgroundColor: theme.colors.inputBackground, // translucent white background
-    paddingVertical: theme.spacing.small - 2, // 6px -> small (8) - 2
-    paddingHorizontal: theme.spacing.medium, // 16px
-    borderRadius: theme.radius.large, // 20px
-    marginTop: theme.spacing.small + 2, // 10px -> small (8) + 2
+    backgroundColor: theme.colors.inputBackground,
+    paddingVertical: theme.spacing.small - 2,
+    paddingHorizontal: theme.spacing.medium,
+    borderRadius: theme.radius.large,
+    marginTop: theme.spacing.small + 2,
   },
-  addressText: { color: '#fff', fontSize: 14 },
+  addressText: {color: '#fff', fontSize: 14},
 
   profileRow: {
     flexDirection: 'row',

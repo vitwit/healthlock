@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -10,20 +10,20 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation } from '../components/providers/NavigationProvider';
+import {useNavigation} from '../components/providers/NavigationProvider';
 import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import { useToast } from '../components/providers/ToastContext';
-import { useAuthorization } from '../components/providers/AuthorizationProvider';
-import { sha256 } from 'js-sha256';
-import { PublicKey } from '@solana/web3.js';
-import { useConnection } from '../components/providers/ConnectionProvider';
+import {useToast} from '../components/providers/ToastContext';
+import {useAuthorization} from '../components/providers/AuthorizationProvider';
+import {sha256} from 'js-sha256';
+import {PublicKey} from '@solana/web3.js';
+import {useConnection} from '../components/providers/ConnectionProvider';
 import bs58 from 'bs58';
-import { Transaction, TransactionInstruction } from '@solana/web3.js';
-import { PROGRAM_ID } from '../util/constants';
-import { RecordType } from '../components/RecordCard';
+import {Transaction, TransactionInstruction} from '@solana/web3.js';
+import {PROGRAM_ID} from '../util/constants';
+import {RecordType} from '../components/RecordCard';
 import theme from '../util/theme';
 
 type OrganizationType = {
@@ -38,16 +38,16 @@ type OrganizationType = {
 
 const ShareRecordDialogScreen = () => {
   const toast = useToast();
-  const { selectedAccount } = useAuthorization();
-  const { connection } = useConnection();
+  const {selectedAccount} = useAuthorization();
+  const {connection} = useConnection();
   const [records, setRecords] = useState<RecordType[]>([]);
   const [organizationsWithAccess, setOrganizationsWithAccess] = useState<
     string[]
   >([]);
-  const { goBack, currentParams } = useNavigation();
-  const { authorizeSession } = useAuthorization();
+  const {goBack, currentParams} = useNavigation();
+  const {authorizeSession} = useAuthorization();
   const [organizations, setOrganizations] = useState<OrganizationType[]>([]);
-  const [selectedOrgs, setSelectedOrgs] = useState<{ [key: string]: boolean }>({
+  const [selectedOrgs, setSelectedOrgs] = useState<{[key: string]: boolean}>({
     org1: true,
     org2: false,
     org3: false,
@@ -57,7 +57,7 @@ const ShareRecordDialogScreen = () => {
   const [revokeAccessLoading, setRevokeAccessLoading] = useState<string | null>(
     null,
   );
-  const { accounts } = useAuthorization();
+  const {accounts} = useAuthorization();
   const [publicKey, setPublicKey] = useState<PublicKey>();
 
   useEffect(() => {
@@ -106,7 +106,7 @@ const ShareRecordDialogScreen = () => {
   }, []);
 
   const toggleOrg = (id: string) => {
-    setSelectedOrgs(prev => ({ ...prev, [id]: !prev[id] }));
+    setSelectedOrgs(prev => ({...prev, [id]: !prev[id]}));
   };
 
   const organizationDiscriminator = Buffer.from(
@@ -168,7 +168,8 @@ const ShareRecordDialogScreen = () => {
     };
   };
 
-  const [organizationsLoading, setOrganizationsLoading] = useState<boolean>(false);
+  const [organizationsLoading, setOrganizationsLoading] =
+    useState<boolean>(false);
 
   const fetchAllOrganizations = async (): Promise<OrganizationType[]> => {
     try {
@@ -188,7 +189,7 @@ const ShareRecordDialogScreen = () => {
       console.log(`Found ${accounts.length} organization accounts`);
 
       const organizations = accounts
-        .map(({ account }) => {
+        .map(({account}) => {
           try {
             const data = account.data.slice(8);
             const organization = deserializeOrganization(data);
@@ -477,9 +478,9 @@ const ShareRecordDialogScreen = () => {
 
           // Define account keys
           const keys = [
-            { pubkey: healthRecordPda, isSigner: false, isWritable: true },
-            { pubkey: organizationPDA, isSigner: false, isWritable: true },
-            { pubkey: userPubkey, isSigner: true, isWritable: true },
+            {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+            {pubkey: organizationPDA, isSigner: false, isWritable: true},
+            {pubkey: userPubkey, isSigner: true, isWritable: true},
           ];
 
           // Create transaction instruction
@@ -510,7 +511,8 @@ const ShareRecordDialogScreen = () => {
             },
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          // await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -591,9 +593,9 @@ const ShareRecordDialogScreen = () => {
             ]);
 
             const keys = [
-              { pubkey: healthRecordPda, isSigner: false, isWritable: true },
-              { pubkey: organizationPDA, isSigner: false, isWritable: true },
-              { pubkey: userPubkey, isSigner: true, isWritable: true },
+              {pubkey: healthRecordPda, isSigner: false, isWritable: true},
+              {pubkey: organizationPDA, isSigner: false, isWritable: true},
+              {pubkey: userPubkey, isSigner: true, isWritable: true},
             ];
 
             const instruction = new TransactionInstruction({
@@ -617,7 +619,8 @@ const ShareRecordDialogScreen = () => {
             },
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          // await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -669,7 +672,7 @@ const ShareRecordDialogScreen = () => {
 
       // Optionally update local state to remove the organization from selected orgs
       setSelectedOrgs(prev => {
-        const updated = { ...prev };
+        const updated = {...prev};
         delete updated[organizationPublicKey.toBase58()];
         return updated;
       });
@@ -732,23 +735,27 @@ const ShareRecordDialogScreen = () => {
         {/* Record Info */}
         <View style={styles.recordBox}>
           <Text style={styles.recordTitle}>{currentParams?.record?.title}</Text>
-          <Text style={styles.recordDescription}>{currentParams?.record?.description}</Text>
+          <Text style={styles.recordDescription}>
+            {currentParams?.record?.description}
+          </Text>
         </View>
 
         <ScrollView contentContainerStyle={styles.orgList}>
-          {
-            organizations.length === 0 && !organizationsLoading &&
+          {organizations.length === 0 && !organizationsLoading && (
             <View style={styles.orgsLoading}>
               <Text style={styles.orgsLoadingText}>No Organizations Found</Text>
             </View>
-          }
-          {
-            organizations.length === 0 && organizationsLoading &&
+          )}
+          {organizations.length === 0 && organizationsLoading && (
             <View>
-              <ActivityIndicator style={styles.loading} size="large" color="#fff" />
+              <ActivityIndicator
+                style={styles.loading}
+                size="large"
+                color="#fff"
+              />
               <Text style={styles.loadingText}>Please wait...</Text>
             </View>
-          }
+          )}
 
           {organizations.map((org, index) => (
             <View key={org.owner.toBase58() ?? index} style={styles.orgRow}>
@@ -843,7 +850,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     color: theme.colors.textSecondary,
-
   },
   orgsLoading: {
     flex: 1,
@@ -918,11 +924,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
-  // revokeButton: {
-  //   flexDirection: 'row',
-  //   alignItems: 'center',
-  //   gap: 4, // or use marginLeft if gap not supported
-  // },
 });
 
 export default ShareRecordDialogScreen;

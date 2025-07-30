@@ -68,7 +68,7 @@ const MainScreen = () => {
 
   useEffect(() => {
     if (!teeState) fetchTEEState();
-  }, []);
+  }, [teeState]);
 
   const renderScreen = () => {
     switch (activeTab) {
@@ -88,8 +88,6 @@ const MainScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>{renderScreen()}</View>
-
-      {/* Floating + Button */}
 
       {/* Floating Button */}
       {selectedRole === 'user' && (
@@ -222,13 +220,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryAction,
     alignItems: 'center',
     justifyContent: 'center',
-
-    // Remove the absolute stuff
-    // position: 'absolute',
-    // bottom: 20,
-    // right: 20,
-
-    // Shadows
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: {width: 0, height: 4},
@@ -242,10 +233,10 @@ const styles = StyleSheet.create({
 
   fabWrapper: {
     position: 'absolute',
-    bottom: 90, // Above bottom nav bar
+    bottom: 90,
     right: 20,
     zIndex: 1000,
-    elevation: 10, // For Android touch priority
+    elevation: 10,
   },
 });
 

@@ -584,7 +584,8 @@ const DashboardScreen = () => {
             signedTxs[0].serialize(),
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          // await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',
@@ -770,7 +771,8 @@ const DashboardScreen = () => {
             },
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          // await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           toast.show({
             type: 'success',

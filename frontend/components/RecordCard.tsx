@@ -32,8 +32,8 @@ const RecordCard = ({
   const formattedDate = new Date(record.createdAt * 1000).toLocaleDateString();
   const {signMessage} = useSolanaMessageSigner();
   const {selectedAccount} = useAuthorization();
-  const {currentScreen, navigate} = useNavigation();
-
+  const {currentScreen, navigate, selectedRole} = useNavigation();
+  const isUser = selectedRole === 'user';
   console.log('curre,,,', currentScreen);
 
   const toast = useToast();
@@ -180,27 +180,31 @@ const RecordCard = ({
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.button} onPress={() => onViewRecord()}>
-          <Icon name="visibility" size={16} color="#fff" />
-          <Text style={styles.buttonText}>View</Text>
+          <Icon name="download" size={16} color="#fff" />
+          <Text style={styles.buttonText}>Download</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => {
-            navigate('ShareRecord', {record});
-          }}>
-          <Icon name="share" size={16} color="#fff" />
-          <Text style={styles.buttonText}>Share</Text>
-        </TouchableOpacity>
+        {isUser && (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              navigate('ShareRecord', {record});
+            }}>
+            <Icon name="share" size={16} color="#fff" />
+            <Text style={styles.buttonText}>Share</Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity
-          style={[styles.button, styles.deleteButton]}
-          onPress={() => {
-            onDelete(record.id, record.title);
-          }}>
-          <Icon name="delete" size={16} color="red" />
-          <Text style={[styles.buttonText, {color: 'red'}]}>Delete</Text>
-        </TouchableOpacity>
+        {isUser && (
+          <TouchableOpacity
+            style={[styles.button, styles.deleteButton]}
+            onPress={() => {
+              onDelete(record.id, record.title);
+            }}>
+            <Icon name="delete" size={16} color="red" />
+            <Text style={[styles.buttonText, {color: 'red'}]}>Delete</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -253,7 +257,6 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 8,
   },

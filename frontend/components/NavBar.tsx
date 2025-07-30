@@ -15,12 +15,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 22,
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
   },
 
   navTitle: {
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#00d4ff',
   },
 });

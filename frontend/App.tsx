@@ -1,7 +1,10 @@
 import React from 'react';
-import {SafeAreaView, StyleSheet} from 'react-native';
+import {SafeAreaView, StyleSheet, useAnimatedValue} from 'react-native';
 import {ConnectionProvider} from './components/providers/ConnectionProvider';
-import {AuthorizationProvider} from './components/providers/AuthorizationProvider';
+import {
+  AuthorizationProvider,
+  useAuthorization,
+} from './components/providers/AuthorizationProvider';
 import {
   NavigationProvider,
   useNavigation,
@@ -29,7 +32,12 @@ if (typeof global.TextDecoder === 'undefined') {
 
 function AppNavigator() {
   const {currentScreen} = useNavigation();
+  const {selectedAccount} = useAuthorization();
   console.log('c...', currentScreen);
+
+  if (!selectedAccount) {
+    return <ConnectWalletScreen />;
+  }
 
   switch (currentScreen) {
     case 'ConnectWallet':
