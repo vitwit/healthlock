@@ -64,8 +64,8 @@ function getPublicKeyFromAddress(address: Base64EncodedAddress): PublicKey {
 }
 
 export const APP_IDENTITY = {
-  name: 'FortuneX',
-  uri: 'https://vitwit.com',
+  name: 'HealthLock',
+  uri: 'https://healthlock.xyz',
   icon: 'favicon.ico',
 };
 

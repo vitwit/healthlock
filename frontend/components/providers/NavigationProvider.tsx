@@ -3,11 +3,8 @@ import React, {createContext, useContext, useState} from 'react';
 type ScreenName =
   | 'ConnectWallet'
   | 'Dashboard'
-  | 'Settings'
-  | 'Records'
   | 'Organizations'
   | 'Upload'
-  | 'RegisterOrg'
   | 'ShareRecord';
 
 interface ScreenStackEntry {

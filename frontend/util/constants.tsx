@@ -1,4 +1,4 @@
-import {PublicKey} from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 
 export const TEE_STATE = Buffer.from('state');
 export const PROGRAM_ID = new PublicKey(

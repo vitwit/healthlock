@@ -34,6 +34,8 @@ import {useToast} from '../components/providers/ToastContext';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
 import {sha256} from '@noble/hashes/sha256';
 import {uploadJsonToPinata} from '../util/ipfs';
+import {Buffer} from 'buffer';
+import theme from '../util/theme';
 
 function extractBase64FromPemWrappedKey(base64Pem: string): string {
   const pemString = Buffer.from(base64Pem, 'base64').toString('utf-8');
@@ -313,7 +315,8 @@ const UploadRecordScreen = () => {
             },
           );
 
-          await confirmTransactionWithPolling(txid, 'confirmed');
+          // await confirmTransactionWithPolling(txid, 'confirmed');
+          await connection.confirmTransaction(txid, 'confirmed');
 
           console.log('Health record uploaded successfully:', {
             txid,
@@ -469,8 +472,7 @@ const UploadRecordScreen = () => {
                     </Text>
                     {!selectedFile ? (
                       <Text style={styles.uploadSubText}>
-                        Supported formats: PDF, JPG, PNG{'\n'}
-                        Lab reports, X-rays, prescriptions, medical documents
+                        Supported formats: PDF, JPG, PNG
                       </Text>
                     ) : (
                       <View style={styles.fileInfo}>
@@ -589,14 +591,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
+    fontSize: 14,
+    color: theme.colors.textSecondary,
     marginBottom: 8,
   },
   input: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
+    borderRadius: 8,
     padding: 14,
     color: 'white',
     fontSize: 16,
@@ -628,17 +629,15 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   uploadText: {
-    color: 'white',
-    fontSize: 16,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
     textAlign: 'center',
     marginBottom: 8,
-    fontWeight: '500',
   },
   uploadSubText: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
-    lineHeight: 16,
   },
   fileInfo: {
     alignItems: 'center',
