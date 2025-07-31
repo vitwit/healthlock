@@ -31,6 +31,9 @@ import (
 
 var (
 	cfgPath string
+
+	debug bool
+
 	rootCmd = &cobra.Command{
 		Use:   "start",
 		Short: "Start the service with the specified config file",
@@ -49,6 +52,8 @@ func Execute() {
 func init() {
 	rootCmd.Flags().StringVar(&cfgPath, "config", "", "Path to config.toml")
 	rootCmd.MarkFlagRequired("config")
+
+	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode")
 }
 
 func runStart(cmd *cobra.Command, args []string) {
@@ -63,7 +68,7 @@ func runStart(cmd *cobra.Command, args []string) {
 	ctx = ctx.WithConfig(config)
 
 	// generate keys
-	keyPairs, err := keys.GenerateKeyPair(2048)
+	keyPairs, err := keys.GenerateKeyPair(2048, debug)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,7 +85,7 @@ func runStart(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	if err := solanaClient.CreateWallet(); err != nil {
+	if err := solanaClient.CreateWallet(debug); err != nil {
 		log.Fatal(err)
 	}
 

@@ -11,9 +11,12 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 )
+
+const keyFile = "rsa_private.pem"
 
 type KeyPair struct {
 	PrivateKey *rsa.PrivateKey
@@ -21,11 +24,54 @@ type KeyPair struct {
 }
 
 // GenerateKeyPair creates a new RSA key pair
-func GenerateKeyPair(bits int) (*KeyPair, error) {
+func GenerateKeyPair(bits int, debug bool) (*KeyPair, error) {
+	if debug {
+		// Try to load from file
+		data, err := os.ReadFile(keyFile)
+		if err == nil {
+			block, _ := pem.Decode(data)
+			if block == nil || block.Type != "RSA PRIVATE KEY" {
+				return nil, errors.New("invalid PEM block in private key file")
+			}
+
+			privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse private key: %w", err)
+			}
+
+			return &KeyPair{
+				PrivateKey: privKey,
+				PublicKey:  &privKey.PublicKey,
+			}, nil
+		}
+
+		fmt.Println("No existing key found, generating new RSA key pair in debug mode...")
+	}
+
 	privKey, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
 		return nil, err
 	}
+
+	if debug {
+		// Save key to file
+		keyBytes := x509.MarshalPKCS1PrivateKey(privKey)
+		pemBlock := &pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: keyBytes,
+		}
+
+		file, err := os.OpenFile(keyFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open key file for writing: %w", err)
+		}
+		defer file.Close()
+
+		if err := pem.Encode(file, pemBlock); err != nil {
+			return nil, fmt.Errorf("failed to write private key to file: %w", err)
+		}
+	}
+
 	return &KeyPair{
 		PrivateKey: privKey,
 		PublicKey:  &privKey.PublicKey,
