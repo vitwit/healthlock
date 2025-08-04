@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-healthlock = "BD5UPzmwnKQ8oAhDaViS9dXopBf5wVZ57RAngCtwEdkQ"
+healthlock = "8zjg3UihgxJ3H8AtWfLdGkfBGauVyvJHAQaKW8v1y4Mj"
 
 [registry]
 url = "https://api.apr.dev"

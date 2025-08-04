@@ -1,7 +1,9 @@
 [solana]
-rpc = "http://localhost:8899"
-websocket = "ws://localhost:8900"
-program-id = "5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX"
+# rpc = "http://localhost:8899"
+rpc = "https://api.devnet.solana.com"
+# websocket = "ws://localhost:8900"
+websocket = "wss://api.devnet.solana.com"
+program-id = "8zjg3UihgxJ3H8AtWfLdGkfBGauVyvJHAQaKW8v1y4Mj"
 network-type = "local"
 
 [rest]

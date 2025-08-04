@@ -84,7 +84,6 @@ const OrganizationRecordCard = ({
         throw new Error('Missing signer public key');
       }
 
-      // Create signature message
       const message = `record-access:${selectedAccount?.publicKey?.toBase58()}:${
         record.owner
       }:${recordID}`;
@@ -92,7 +91,6 @@ const OrganizationRecordCard = ({
       const signatureBytes = await signMessage(message);
       const signature = bs58.encode(signatureBytes);
 
-      // Send request to backend with specific options for React Native
       const response = await fetch(REST_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -112,7 +110,6 @@ const OrganizationRecordCard = ({
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
 
-      // Read the binary data as base64 directly from React Native fetch
       const base64Data = await response.text();
 
       if (!base64Data || base64Data.length === 0) {

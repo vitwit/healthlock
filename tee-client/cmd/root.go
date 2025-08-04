@@ -128,7 +128,7 @@ func runStart(cmd *cobra.Command, args []string) {
 
 	signature, err := solanaClient.RegisterTEENode(*ctx, []byte(pubKeyBase64), report)
 	if err != nil {
-		log.Fatal(err)
+		// log.Fatal(err)
 	}
 
 	fmt.Println(signature)

@@ -7,7 +7,7 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-declare_id!("5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX");
+declare_id!("8zjg3UihgxJ3H8AtWfLdGkfBGauVyvJHAQaKW8v1y4Mj");
 
 pub const ANCHOR_DESCRIMINATOR_SIZE: usize = 8;
 
