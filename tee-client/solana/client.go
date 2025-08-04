@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"time"
 
 	solana "github.com/gagliardetto/solana-go"
@@ -44,15 +45,54 @@ func (c *Client) RPC() *rpc.Client {
 	return c.rpcClient
 }
 
-func (c *Client) CreateWallet() error {
+func (c *Client) CreateWallet(debug bool) error {
 	fmt.Println("================== Generating Wallet ===================")
-	account := solana.NewWallet()
+
+	const keyFile = "private-key.key"
+	var (
+		account *solana.Wallet
+		err     error
+	)
+
+	if debug {
+		// Try to load existing wallet
+		keyData, readErr := os.ReadFile(keyFile)
+		if readErr == nil {
+			account, err = solana.WalletFromPrivateKeyBase58(string(keyData))
+			if err != nil {
+				return fmt.Errorf("failed to load wallet from private key: %w", err)
+			}
+			fmt.Println("Loaded wallet from", keyFile)
+		} else {
+			fmt.Println("No existing key found or unreadable, generating new wallet...")
+			account = solana.NewWallet()
+			if err := savePrivateKey(account, keyFile); err != nil {
+				return err
+			}
+		}
+	} else {
+		account = solana.NewWallet()
+		if err := savePrivateKey(account, keyFile); err != nil {
+			return err
+		}
+		fmt.Println("New wallet generated and key saved.")
+	}
 
 	c.wallet = account.PrivateKey
 	c.pubKey = account.PublicKey()
-	fmt.Println("Public Key: ", c.pubKey.String())
+
+	fmt.Println("Public Key:", c.pubKey.String())
 	fmt.Println("===========================================================")
 
+	return nil
+}
+
+// savePrivateKey writes the wallet's private key to the specified file with secure permissions
+func savePrivateKey(account *solana.Wallet, path string) error {
+	err := os.WriteFile(path, []byte(account.PrivateKey.String()), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to store account private key: %w", err)
+	}
 	return nil
 }
 

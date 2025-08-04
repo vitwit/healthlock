@@ -7,7 +7,7 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-declare_id!("5PVKhLRUvDnc9tRAwXRroECjeibeT8oTjD5duYte1nuX");
+declare_id!("8zjg3UihgxJ3H8AtWfLdGkfBGauVyvJHAQaKW8v1y4Mj");
 
 pub const ANCHOR_DESCRIMINATOR_SIZE: usize = 8;
 
@@ -70,8 +70,8 @@ pub mod healthlock {
         instructions::revoke_access(ctx, record_id, organization)
     }
 
-    pub fn update_user_vault(ctx: Context<UpdateUserVault>, is_active: bool, age:u64, name: String) -> Result<()> {
-        instructions::update_user_vault(ctx, is_active, name, age)
+    pub fn update_user_vault(ctx: Context<UpdateUserVault>, age:u64, name: String) -> Result<()> {
+        instructions::update_user_vault(ctx, age, name)
     }
 
     pub fn deactivate_record(ctx: Context<DeactivateRecord>, record_id: u64) -> Result<()> {

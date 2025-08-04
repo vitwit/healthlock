@@ -239,28 +239,28 @@ const styles = StyleSheet.create({
   },
   organizationCard: {
     width: '100%',
-    marginVertical: 10, // slightly increased spacing between cards
+    marginVertical: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 16, // more rounded for modern feel
-    padding: 20, // more padding for better content breathing space
+    borderRadius: 16,
+    padding: 20,
   },
 
   organizationName: {
     color: 'white',
-    fontSize: 18, // increased from 16
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8, // spacing below name
+    marginBottom: 8,
   },
 
   contactInfo: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 16, // increased from 14
+    fontSize: 16,
     marginBottom: 4,
   },
 
   createdAt: {
     color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 14, // increased from 13
+    fontSize: 14,
   },
   loaderContainer: {
     flex: 1,

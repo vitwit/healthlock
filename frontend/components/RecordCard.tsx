@@ -1,14 +1,15 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
-import { Alert } from 'react-native';
+import {Alert} from 'react-native';
 import bs58 from 'bs58';
-import { useAuthorization } from './providers/AuthorizationProvider';
-import { useSolanaMessageSigner } from '../hooks/useSignMessage';
-import { ERR_UNKNOWN, REST_ENDPOINT } from '../util/constants';
-import { Buffer } from 'buffer';
-import { saveFileToDownloads } from './OrganiaztionRecordCard';
-import { useToast } from './providers/ToastContext';
+import {useAuthorization} from './providers/AuthorizationProvider';
+import {useSolanaMessageSigner} from '../hooks/useSignMessage';
+import {ERR_UNKNOWN, REST_ENDPOINT} from '../util/constants';
+import {Buffer} from 'buffer';
+import {saveFileToDownloads} from './OrganiaztionRecordCard';
+import {useToast} from './providers/ToastContext';
+import {useNavigation} from './providers/NavigationProvider';
 
 export type RecordType = {
   id: number;
@@ -23,16 +24,17 @@ export type RecordType = {
 
 const RecordCard = ({
   record,
-  navigate,
   onDelete,
 }: {
   record: RecordType;
-  navigate: any;
   onDelete: (recordId: number, title: string) => void;
 }) => {
   const formattedDate = new Date(record.createdAt * 1000).toLocaleDateString();
-  const { signMessage } = useSolanaMessageSigner();
-  const { selectedAccount } = useAuthorization();
+  const {signMessage} = useSolanaMessageSigner();
+  const {selectedAccount} = useAuthorization();
+  const {currentScreen, navigate, selectedRole} = useNavigation();
+  const isUser = selectedRole === 'user';
+  console.log('curre,,,', currentScreen);
 
   const toast = useToast();
 
@@ -48,7 +50,9 @@ const RecordCard = ({
       }
 
       // Create signature message
-      const message = `record-access:${selectedAccount?.publicKey?.toBase58()}:${record.owner}:${recordID}`;
+      const message = `record-access:${selectedAccount?.publicKey?.toBase58()}:${
+        record.owner
+      }:${recordID}`;
       console.log('📝 Signing message:', message);
 
       const signatureBytes = await signMessage(message);
@@ -67,7 +71,7 @@ const RecordCard = ({
           signer: signer,
           signature: signature,
           recordId: recordID,
-          recordOwner: record.owner
+          recordOwner: record.owner,
         }),
       });
 
@@ -92,15 +96,14 @@ const RecordCard = ({
       // Preview first few bytes for file type detection
       console.log('🔍 First bytes:', decodedBytes.slice(0, 4));
 
-      const mimeTypeToExtension: { [mimeType: string]: string } = {
+      const mimeTypeToExtension: {[mimeType: string]: string} = {
         'application/pdf': 'pdf',
         'image/png': 'png',
         'image/jpeg': 'jpg',
         'image/jpg': 'jpg', // Not standard, but included for completeness
       };
 
-
-      const extension = mimeTypeToExtension[record.mimeType] || "png";
+      const extension = mimeTypeToExtension[record.mimeType] || 'png';
       // Create a unique filename
       const sanitizedTitle = record.title.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${sanitizedTitle}_${recordID}.${extension}`;
@@ -109,7 +112,6 @@ const RecordCard = ({
       console.log('💾 Saving file to:', filePath);
 
       try {
-
         const savedPath = await saveFileToDownloads(base64Data, fileName);
 
         // await Share.open({
@@ -120,16 +122,14 @@ const RecordCard = ({
         // });
         toast.show({
           message: `File saved to ${savedPath}`,
-          type: "success"
-        })
-
+          type: 'success',
+        });
       } catch (err: any) {
         toast.show({
-          message: `Failed to save: ${err?.message ||  ERR_UNKNOWN}`,
-          type: "error"
-        })
+          message: `Failed to save: ${err?.message || ERR_UNKNOWN}`,
+          type: 'error',
+        });
       }
-
     } catch (err: any) {
       console.error('❌ Error in onViewRecord:', err);
 
@@ -153,7 +153,7 @@ const RecordCard = ({
       }
 
       Alert.alert('Error viewing record', errorMessage, [
-        { text: 'OK' },
+        {text: 'OK'},
         {
           text: 'Retry',
           onPress: () => onViewRecord(),
@@ -179,28 +179,32 @@ const RecordCard = ({
       </View>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => onViewRecord()}>
-          <Icon name="visibility" size={16} color="#fff" />
-          <Text style={styles.buttonText}>View</Text>
+        <TouchableOpacity style={styles.button} onPress={() => onViewRecord()}>
+          <Icon name="download" size={16} color="#fff" />
+          <Text style={styles.buttonText}>Download</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => navigate('ShareRecord', { record })}>
-          <Icon name="share" size={16} color="#fff" />
-          <Text style={styles.buttonText}>Share</Text>
-        </TouchableOpacity>
+        {isUser && (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              navigate('ShareRecord', {record});
+            }}>
+            <Icon name="share" size={16} color="#fff" />
+            <Text style={styles.buttonText}>Share</Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity
-          style={[styles.button, styles.deleteButton]}
-          onPress={() => {
-            onDelete(record.id, record.title);
-          }}>
-          <Icon name="delete" size={16} color="red" />
-          <Text style={[styles.buttonText, { color: 'red' }]}>Delete</Text>
-        </TouchableOpacity>
+        {isUser && (
+          <TouchableOpacity
+            style={[styles.button, styles.deleteButton]}
+            onPress={() => {
+              onDelete(record.id, record.title);
+            }}>
+            <Icon name="delete" size={16} color="red" />
+            <Text style={[styles.buttonText, {color: 'red'}]}>Delete</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -213,7 +217,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
@@ -253,7 +257,6 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 8,
   },

@@ -1,17 +1,17 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
-import { Alert } from 'react-native';
+import {Alert} from 'react-native';
 import bs58 from 'bs58';
-import { useAuthorization } from './providers/AuthorizationProvider';
-import { useSolanaMessageSigner } from '../hooks/useSignMessage';
-import { ERR_UNKNOWN, REST_ENDPOINT } from '../util/constants';
-import { shortenAddress } from '../util/address';
-import { PublicKey } from '@solana/web3.js';
+import {useAuthorization} from './providers/AuthorizationProvider';
+import {useSolanaMessageSigner} from '../hooks/useSignMessage';
+import {ERR_UNKNOWN, REST_ENDPOINT} from '../util/constants';
+import {shortenAddress} from '../util/address';
+import {PublicKey} from '@solana/web3.js';
 
-import { PermissionsAndroid, Platform } from 'react-native';
-import { Buffer } from 'buffer';
-import { useToast } from './providers/ToastContext';
+import {PermissionsAndroid, Platform} from 'react-native';
+import {Buffer} from 'buffer';
+import {useToast} from './providers/ToastContext';
 
 /**
  * Saves a base64-encoded file to the Android public Downloads directory.
@@ -49,7 +49,6 @@ export const saveFileToDownloads = async (
   }
 };
 
-
 export type OrganizationRecordType = {
   id: number;
   title: string;
@@ -61,7 +60,6 @@ export type OrganizationRecordType = {
   mimeType: string;
 };
 
-
 const OrganizationRecordCard = ({
   record,
   navigate,
@@ -71,11 +69,10 @@ const OrganizationRecordCard = ({
   navigate: any;
   onDelete: (recordId: number, title: string) => void;
 }) => {
-
-  console.log(record)
+  console.log(record);
   const formattedDate = new Date(record.createdAt * 1000).toLocaleDateString();
-  const { signMessage } = useSolanaMessageSigner();
-  const { selectedAccount } = useAuthorization();
+  const {signMessage} = useSolanaMessageSigner();
+  const {selectedAccount} = useAuthorization();
 
   const onViewRecord = async () => {
     try {
@@ -87,13 +84,13 @@ const OrganizationRecordCard = ({
         throw new Error('Missing signer public key');
       }
 
-      // Create signature message
-      const message = `record-access:${selectedAccount?.publicKey?.toBase58()}:${record.owner}:${recordID}`;
+      const message = `record-access:${selectedAccount?.publicKey?.toBase58()}:${
+        record.owner
+      }:${recordID}`;
 
       const signatureBytes = await signMessage(message);
       const signature = bs58.encode(signatureBytes);
 
-      // Send request to backend with specific options for React Native
       const response = await fetch(REST_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -104,7 +101,7 @@ const OrganizationRecordCard = ({
           signer: signer,
           signature: signature,
           recordId: recordID,
-          recordOwner: record.owner
+          recordOwner: record.owner,
         }),
       });
 
@@ -113,7 +110,6 @@ const OrganizationRecordCard = ({
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
 
-      // Read the binary data as base64 directly from React Native fetch
       const base64Data = await response.text();
 
       if (!base64Data || base64Data.length === 0) {
@@ -125,21 +121,19 @@ const OrganizationRecordCard = ({
       // Preview first few bytes for file type detection
       console.log('🔍 First bytes:', decodedBytes.slice(0, 4));
 
-      const mimeTypeToExtension: { [mimeType: string]: string } = {
+      const mimeTypeToExtension: {[mimeType: string]: string} = {
         'application/pdf': 'pdf',
         'image/png': 'png',
         'image/jpeg': 'jpg',
         'image/jpg': 'jpg', // Not standard, but included for completeness
       };
 
-
-      const extension = mimeTypeToExtension[record.mimeType] || "png";
+      const extension = mimeTypeToExtension[record.mimeType] || 'png';
       // Create a unique filename
       const sanitizedTitle = record.title.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${sanitizedTitle}_${recordID}.${extension}`;
 
       try {
-
         const savedPath = await saveFileToDownloads(base64Data, fileName);
 
         // await Share.open({
@@ -151,16 +145,14 @@ const OrganizationRecordCard = ({
 
         toast.show({
           message: `File saved to ${savedPath}`,
-          type: "success"
-        })
-
+          type: 'success',
+        });
       } catch (err: any) {
         toast.show({
           message: `Failed to save: ${err?.message || ERR_UNKNOWN}`,
-          type: "error"
-        })
+          type: 'error',
+        });
       }
-
     } catch (err: any) {
       console.error('❌ Error in onViewRecord:', err);
 
@@ -184,7 +176,7 @@ const OrganizationRecordCard = ({
       }
 
       Alert.alert('Error viewing record', errorMessage, [
-        { text: 'OK' },
+        {text: 'OK'},
         {
           text: 'Retry',
           onPress: () => onViewRecord(),
@@ -216,10 +208,7 @@ const OrganizationRecordCard = ({
 
       {/* Actions */}
       <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={onViewRecord}
-        >
+        <TouchableOpacity style={styles.button} onPress={onViewRecord}>
           <Icon name="visibility" size={16} color="#fff" />
           <Text style={styles.buttonText}>View</Text>
         </TouchableOpacity>
@@ -235,7 +224,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
@@ -293,6 +282,5 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 });
-
 
 export default OrganizationRecordCard;

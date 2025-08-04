@@ -1,40 +1,63 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl, // Add this import
-} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import theme from '../util/theme';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+} from 'react-native';
+import {NavBar} from '../components/NavBar';
+import RecordCard, {RecordType} from '../components/RecordCard';
 import {useAuthorization} from '../components/providers/AuthorizationProvider';
 import {useNavigation} from '../components/providers/NavigationProvider';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import {useConnection} from '../components/providers/ConnectionProvider';
-import {PublicKey} from '@solana/web3.js';
-import {sha256} from 'js-sha256';
-import {ERR_UNKNOWN, PROGRAM_ID} from '../util/constants';
-import RecordCard, {RecordType} from '../components/RecordCard';
-import bs58 from 'bs58';
 import {
-  Transaction,
+  PublicKey,
   SystemProgram,
+  Transaction,
   TransactionInstruction,
 } from '@solana/web3.js';
+import {getOrganization, Organization} from '../api/organization';
+import {ERR_UNKNOWN, PROGRAM_ID} from '../util/constants';
+import {Buffer} from 'buffer';
+import {useToast} from '../components/providers/ToastContext';
+import {sha256} from 'js-sha256';
+import bs58 from 'bs58';
 import {
   transact,
   Web3MobileWallet,
 } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
-import {getOrganization, Organization} from '../api/organization';
-import {useToast} from '../components/providers/ToastContext';
-import {parseTEEState} from '../api/state';
-import {useTEEContext} from '../components/providers/TEEStateProvider';
-import ProfileCard from '../components/ProfileCard';
-import {shortenAddress} from '../util/address';
-import OrganizationRecordCard from '../components/OrganiaztionRecordCard';
+
+function parseUserVault(data: Buffer) {
+  let offset = 8;
+
+  const owner = new PublicKey(data.slice(offset, offset + 32));
+  offset += 32;
+
+  const recordIdsLen = data.readUInt32LE(offset);
+  offset += 4;
+
+  const record_ids = [];
+  for (let i = 0; i < recordIdsLen; i++) {
+    const recordId = Number(data.readBigUInt64LE(offset));
+    record_ids.push(recordId);
+    offset += 8;
+  }
+
+  return {
+    owner,
+    record_ids,
+  };
+}
+
+function getDiscriminator(name: string): Buffer {
+  const hash = sha256.digest(`account:${name}`);
+  return Buffer.from(hash).slice(0, 8);
+}
 
 export function encodeAnchorString(str: string): Buffer {
   const strBuf = Buffer.from(str, 'utf8');
@@ -43,11 +66,18 @@ export function encodeAnchorString(str: string): Buffer {
   return Buffer.concat([lenBuf, strBuf]);
 }
 
-const DashboardScreen = () => {
+const RecordsScreen = () => {
   const {selectedAccount, deauthorizeSession} = useAuthorization();
   const {selectedRole} = useNavigation();
+  const {connection} = useConnection();
 
-  console.log('address>>>>>>>>>>>>>>.', selectedAccount?.publicKey.toBase58());
+  const toast = useToast();
+  const {navigate, goBack, reset} = useNavigation();
+
+  const [publicKey, setPublicKey] = useState<PublicKey>();
+  useEffect(() => {
+    setPublicKey(selectedAccount?.publicKey);
+  }, [selectedAccount]);
 
   const isUser = selectedRole === 'user';
   const isOrg = selectedRole === 'organization';
@@ -55,100 +85,37 @@ const DashboardScreen = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [contactInfo, setContactInfo] = useState('');
-  const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
-  const [organizationLoading, setOrganizationLoading] =
-    useState<boolean>(false);
+
   const [organization, setOrganization] = useState<Organization | undefined>(
     undefined,
   );
   const [registeredOrganization, setRegisteredOrganization] =
     useState<boolean>(false);
   const [records, setRecords] = useState<RecordType[]>([]);
+  const [filteredRecords, setFilteredRecords] = useState<RecordType[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [userRecordsCount, setUserRecordCount] = useState<number>(0);
   const [sharedRecordsCount, setSharedRecordsCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
-  const [userRecordsLoading, setUserRecordsLoading] = useState<boolean>(false);
-  const [refreshing, setRefreshing] = useState<boolean>(false); // Add refresh state
-
-  const {navigate, goBack, reset} = useNavigation();
-  const {connection} = useConnection();
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [accessListLength, setaccessListLength] = useState<number>(0);
 
-  const [publicKey, setPublicKey] = useState<PublicKey>();
+  // Filter records based on search query
   useEffect(() => {
-    setPublicKey(selectedAccount?.publicKey);
-  }, [selectedAccount]);
-
-  const toast = useToast();
-
-  const {teeState, setTEEState} = useTEEContext();
-
-  function parseUserVault(data: Buffer) {
-    let offset = 8;
-
-    const owner = new PublicKey(data.slice(offset, offset + 32));
-    offset += 32;
-
-    const recordIdsLen = data.readUInt32LE(offset);
-    offset += 4;
-
-    const record_ids = [];
-    for (let i = 0; i < recordIdsLen; i++) {
-      const recordId = Number(data.readBigUInt64LE(offset));
-      record_ids.push(recordId);
-      offset += 8;
+    if (searchQuery.trim() === '') {
+      setFilteredRecords(records);
+    } else {
+      const filtered = records.filter(
+        record =>
+          record.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          record.description
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase()) ||
+          record.mimeType.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+      setFilteredRecords(filtered);
     }
-
-    return {
-      owner,
-      record_ids,
-    };
-  }
-
-  const fetchTEEState = async () => {
-    try {
-      setLoading(true);
-      const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-        filters: [{dataSize: 1073}],
-      });
-
-      for (const account of accounts) {
-        const parsed = parseTEEState(account.account.data);
-        setTEEState({
-          attestation: parsed.attestation,
-          isInitialized: parsed.isInitialized,
-          pubkey: parsed.pubkey,
-          signer: parsed.signer,
-        });
-      }
-    } catch (err: any) {
-      if (err.message) {
-        toast.show({
-          message: err.message,
-          type: 'error',
-        });
-      } else {
-        toast.show({
-          message: ERR_UNKNOWN,
-          type: 'error',
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!teeState) fetchTEEState();
-  }, []);
-
-  function getDiscriminator(name: string): Buffer {
-    const hash = sha256.digest(`account:${name}`);
-    return Buffer.from(hash).slice(0, 8);
-  }
-
-  const [organizationRecordsLoading, setOrganizationRecordsLoading] =
-    useState<boolean>(false);
+  }, [records, searchQuery]);
 
   const fetchOrganization = async () => {
     if (!publicKey) {
@@ -157,33 +124,33 @@ const DashboardScreen = () => {
     }
     try {
       console.log('fetching organization');
-      setOrganizationLoading(true);
+      setLoading(true);
       const result = await getOrganization(connection, publicKey);
       if (result && result.name.length > 0) {
         setOrganization(result);
-        setRegisteredOrganization(true);
+        setLoading(true);
 
         await getOrganizationRecords(result.recordIds);
       } else {
-        setRegisteredOrganization(false);
+        setLoading(false);
       }
-      console.log(result);
+      console.log('successfull fetched1');
     } catch (error: any) {
       if (error && error.message === 'Organization account not found') {
-        setRegisteredOrganization(false);
+        setLoading(false);
       } else {
         toast.show({type: 'error', message: error?.message || ERR_UNKNOWN});
       }
     } finally {
       console.log('successfull fetched2');
-      setOrganizationLoading(false);
+      setLoading(false);
     }
   };
 
   const getOrganizationRecords = async (accessRecords: string[]) => {
     const recordIdSet = new Set(accessRecords);
     const discriminator = getDiscriminator('HealthRecord');
-    setOrganizationRecordsLoading(false);
+    setLoading(false);
     const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
       filters: [
         {
@@ -209,12 +176,10 @@ const DashboardScreen = () => {
         const record_id = Number(data.readBigUInt64LE(offset));
         offset += 8;
 
-        // Check if this record_id is listed in organization's recordIds
         if (!recordIdSet.has(record_id.toString())) {
           continue;
         }
 
-        // Check if the record is active in the owner's vault
         const [userVaultPda] = PublicKey.findProgramAddressSync(
           [Buffer.from('user_vault'), owner.toBuffer()],
           PROGRAM_ID,
@@ -246,7 +211,6 @@ const DashboardScreen = () => {
         const createdAt = Number(data.readBigInt64LE(offset));
         offset += 8;
 
-        // Skip access list parsing entirely
         let accessListLen = 0;
         const accessListStart = offset;
         try {
@@ -312,7 +276,7 @@ const DashboardScreen = () => {
           err?.message,
         );
       } finally {
-        setOrganizationRecordsLoading(false);
+        setLoading(false);
       }
 
       setaccessListLength(parsedRecords.length);
@@ -339,7 +303,7 @@ const DashboardScreen = () => {
     }
 
     try {
-      setUserRecordsLoading(true);
+      setLoading(true);
       const [userVaultPda] = PublicKey.findProgramAddressSync(
         [Buffer.from('user_vault'), publicKey.toBuffer()],
         PROGRAM_ID,
@@ -378,8 +342,6 @@ const DashboardScreen = () => {
           },
         ],
       });
-
-      console.log('✅ Accounts found:', accounts.length);
 
       const parsedRecords: RecordType[] = [];
 
@@ -502,7 +464,7 @@ const DashboardScreen = () => {
       console.error('Failed to fetch health records:', err);
     } finally {
       console.log('🔁 Done loading');
-      setUserRecordsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -647,12 +609,10 @@ const DashboardScreen = () => {
 
   const handleDeleteRecord = async (recordId: number) => {
     try {
-      setDeleteLoading(recordId);
       await deleteRecordTransaction(recordId);
     } catch (error) {
       console.error('Delete failed:', error);
     } finally {
-      setDeleteLoading(null);
     }
   };
 
@@ -729,17 +689,15 @@ const DashboardScreen = () => {
             PROGRAM_ID,
           );
 
-          // Fixed discriminator calculation
           const discriminator = Buffer.from(
             sha256.digest('global:deactivate_record'),
           ).slice(0, 8);
 
           const instructionData = Buffer.concat([
             discriminator,
-            recordIdBuffer, // This is the _record_id parameter
+            recordIdBuffer,
           ]);
 
-          // Accounts must match the order in your Rust struct
           const keys = [
             {pubkey: userVaultPda, isSigner: false, isWritable: true},
             {pubkey: healthRecordPda, isSigner: false, isWritable: true},
@@ -804,197 +762,153 @@ const DashboardScreen = () => {
     [authorizeSession, connection, toast],
   );
 
-  const renderItem = (item: RecordType) => (
-    <RecordCard record={item} onDelete={handleDeleteRecord} key={item.id} />
-  );
-
-  const renderOrganizationItem = (item: RecordType) => (
-    <OrganizationRecordCard
-      record={item}
-      navigate={navigate}
-      onDelete={handleDeleteRecord}
-      key={item.id}
-    />
-  );
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
 
   return (
     <LinearGradient
-      colors={['#001F3F', '#003366', '#001F3F']}
+      colors={theme.colors.backgroundGradient}
       style={styles.container}>
-      <View style={styles.navBar}>
-        <Text style={styles.navTitle}>HealthLock</Text>
-        <Icon
-          name="logout"
-          size={22}
-          color="#fff"
-          onPress={handleDisconnect} // define this function
+      <NavBar />
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search records..."
+          placeholderTextColor={theme.colors.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
-      </View>
-      {loading ? (
-        <View>
-          <ActivityIndicator style={styles.loading} size="large" color="#fff" />
-          <Text style={styles.loadingText}>Please wait...</Text>
+        <View style={styles.searchIcon}>
+          <Text style={styles.searchIconText}>🔍</Text>
         </View>
-      ) : (
-        <View style={styles.wrapper}>
-          {isOrg && !organizationLoading && !registeredOrganization && (
-            <View style={styles.registrationForm}>
-              <Text style={styles.formHeading}>
-                Your organization is not registered. Please create an account to
-                continue using the application.
-              </Text>
+        {searchQuery.length > 0 && (
+          <TouchableOpacity style={styles.clearButton} onPress={clearSearch}>
+            <Text style={styles.clearButtonText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Name"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                maxLength={50}
-                value={name}
-                onChangeText={setName}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Description"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                maxLength={100}
-                value={description}
-                onChangeText={setDescription}
-              />
-              <TextInput
-                style={styles.input}
-                multiline={true}
-                numberOfLines={3}
-                placeholder="Contact Info"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                maxLength={255}
-                value={contactInfo}
-                onChangeText={setContactInfo}
-              />
-
-              <TouchableOpacity
-                style={styles.registerButton}
-                onPress={() => {
-                  onClickRegisterOrg();
-                }}>
-                <Text style={styles.registerButtonText}>Register</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {(isUser ||
-            (isOrg && !organizationLoading && registeredOrganization)) && (
-            <View>
-              <ProfileCard
-                isUser={isUser}
-                name={
-                  isUser
-                    ? publicKey
-                      ? shortenAddress(publicKey, 9)
-                      : '-'
-                    : organization?.name || '-'
-                }
-                description={!isUser ? organization?.description : null}
-                contactInfo={!isUser ? organization?.contactInfo : null}
-                stats={
-                  isUser
-                    ? [
-                        {title: 'Total Records', value: userRecordsCount},
-                        {title: 'Shared Records', value: sharedRecordsCount},
-                      ]
-                    : [{title: 'Accessible Records', value: accessListLength}]
-                }
-              />
-            </View>
-          )}
-
-          {/* Action Button */}
-          {isUser && (
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => {
-                navigate('Upload');
-              }}>
-              <Icon name="cloud-upload" size={20} color="#fff" />
-              <Text style={styles.uploadButtonText}>Upload New Record</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Record List with RefreshControl */}
-          {isUser && !userRecordsLoading && (
-            <ScrollView
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={['#004080']} // Android
-                  tintColor="#004080" // iOS
-                  title="Pull to refresh" // iOS
-                  titleColor="#fff" // iOS
-                />
-              }>
-              <View style={styles.listContainer}>
-                <Text style={styles.sectionHeading}>Records</Text>
-                <View>{records.map(renderItem)}</View>
-                <View>
-                  {records.length === 0 && !userRecordsLoading && (
-                    <Text
-                      style={{
-                        textAlign: 'center',
-                        fontSize: 16,
-                        color: '#fff',
-                        marginTop: 16,
-                      }}>
-                      No Records Found
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </ScrollView>
-          )}
-          {isOrg && !organizationRecordsLoading && registeredOrganization && (
-            <ScrollView
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={['#004080']} // Android
-                  tintColor="#004080" // iOS
-                  title="Pull to refresh" // iOS
-                  titleColor="#fff" // iOS
-                />
-              }>
-              <View style={styles.listContainer}>
-                <Text style={styles.sectionHeading}>Records</Text>
-                <View>{records.map(renderOrganizationItem)}</View>
-                <View>
-                  {records.length === 0 && !organizationRecordsLoading && (
-                    <Text
-                      style={{
-                        textAlign: 'center',
-                        fontSize: 16,
-                        color: '#fff',
-                        marginTop: 16,
-                      }}>
-                      You don't have access to records
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </ScrollView>
-          )}
+      {/* Search Results Info */}
+      {searchQuery.length > 0 && (
+        <View style={styles.searchInfoContainer}>
+          <Text style={styles.searchInfoText}>
+            Found {filteredRecords.length} record(s) matching "{searchQuery}"
+          </Text>
         </View>
       )}
+
+      <ScrollView style={styles.scrollView}>
+        {loading ? (
+          <View>
+            <ActivityIndicator
+              style={styles.loading}
+              size="large"
+              color="#fff"
+            />
+            <Text style={styles.loadingText}>Please wait...</Text>
+          </View>
+        ) : (
+          filteredRecords.map((record, index) => (
+            <RecordCard
+              key={index}
+              record={record}
+              onDelete={handleDeleteRecord}
+            />
+          ))
+        )}
+
+        {filteredRecords.length === 0 &&
+          !loading &&
+          searchQuery.length === 0 && (
+            <View style={styles.noRecords}>
+              <Text style={styles.noRecordsText}>No Records Found</Text>
+            </View>
+          )}
+
+        {filteredRecords.length === 0 && !loading && searchQuery.length > 0 && (
+          <View style={styles.noRecords}>
+            <Text style={styles.noRecordsText}>
+              No records match your search criteria
+            </Text>
+            <TouchableOpacity
+              style={styles.clearSearchButton}
+              onPress={clearSearch}>
+              <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
     </LinearGradient>
   );
 };
 
+export default RecordsScreen;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: {flex: 1},
+  searchContainer: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    position: 'relative',
   },
-  wrapper: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+  searchInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: theme.colors.textPrimary || '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    paddingLeft: 45,
+    paddingRight: 45,
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: 12,
+    top: '50%',
+    marginTop: -12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchIconText: {
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+  },
+  clearButton: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    marginTop: -12,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    color: theme.colors.textPrimary || '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  searchInfoContainer: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  searchInfoText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  scrollView: {
+    padding: 16,
   },
   loading: {
     flex: 1,
@@ -1003,128 +917,38 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    marginTop: 22,
+    marginTop: 16,
     justifyContent: 'center',
     textAlign: 'center',
     fontWeight: '500',
-    color: '#f5f5f5ff',
+    color: theme.colors.textSecondary,
   },
-  heading: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#f5f5f5ff',
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  statCard: {
+  noRecords: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginHorizontal: 6,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  statTitle: {
-    color: '#fff',
-    fontSize: 14,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  uploadButton: {
-    flexDirection: 'row',
-    backgroundColor: '#004080',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
+    marginTop: 70,
     justifyContent: 'center',
-    marginBottom: 20,
-  },
-  uploadButtonText: {
-    color: '#fff',
-    marginLeft: 8,
-    fontSize: 16,
-  },
-  listContainer: {
-    flex: 1,
-  },
-  sectionHeading: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 12,
-  },
-  recordItem: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 16,
-    marginBottom: 10,
-    borderRadius: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  recordTitle: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  registrationForm: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 10,
-    marginTop: 24,
-  },
-  formHeading: {
-    fontSize: 16,
-    color: '#fff',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  registerButton: {
-    backgroundColor: '#004080',
-    padding: 12,
-    borderRadius: 8,
-  },
-  registerButtonText: {
-    textAlign: 'center',
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 8,
-    padding: 12,
-    color: '#fff',
-    marginBottom: 12,
-  },
-  navBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 22,
-    paddingHorizontal: 22,
   },
-
-  navTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+  noRecordsText: {
+    fontSize: 16,
+    marginTop: 16,
+    justifyContent: 'center',
+    textAlign: 'center',
+    fontWeight: '500',
+    color: theme.colors.textSecondary,
+  },
+  clearSearchButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  clearSearchButtonText: {
+    color: theme.colors.textPrimary || '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
-
-export default DashboardScreen;

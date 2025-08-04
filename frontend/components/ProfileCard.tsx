@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import {View, Text, StyleSheet} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -28,11 +28,15 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   return (
     <LinearGradient
       colors={['#001F3F', '#003366', '#001F3F']}
-      style={styles.card}
-    >
+      style={styles.card}>
       {/* Header */}
       <View style={styles.header}>
-        <Icon name={isUser ? 'person' : 'business'} size={22} color="#fff" style={styles.icon} />
+        <Icon
+          name={isUser ? 'person' : 'business'}
+          size={22}
+          color="#fff"
+          style={styles.icon}
+        />
         <Text style={styles.title}>{name}</Text>
       </View>
 
@@ -64,7 +68,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     </LinearGradient>
   );
 };
-
 
 const styles = StyleSheet.create({
   card: {
